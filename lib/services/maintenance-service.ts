@@ -89,24 +89,7 @@ export async function getMaintenanceStatus(): Promise<MaintenanceConfig> {
     }
   } catch (_) {}
 
-  // 2. Thử lấy từ bản ghi dự phòng __system_maintenance__ trong bảng users
-  try {
-    const { data: userRow, error: userError } = await supabase
-      .from("users")
-      .select("password_hash")
-      .eq("lms_code", MAINTENANCE_FALLBACK_LMS_CODE)
-      .maybeSingle();
-
-    if (!userError && userRow && userRow.password_hash) {
-      const config: MaintenanceConfig = JSON.parse(userRow.password_hash);
-      cachedStatus = config;
-      lastCacheTime = now;
-      writeLocalFile(config);
-      return checkExpiration(config);
-    }
-  } catch (_) {}
-
-  // 3. Fallback đọc file local
+  // 2. Fallback đọc file local
   const local = readLocalFile();
   if (local) {
     cachedStatus = local;
@@ -198,27 +181,6 @@ export async function setMaintenanceStatus(
       savedToSystemSettings = true;
     }
   } catch (_) {}
-
-  // 2. Lưu vào bản ghi dự phòng trong bảng users nếu system_settings chưa sẵn sàng
-  try {
-    // Tìm 1 role_id và status_id hợp lệ
-    const { data: roleRow } = await supabase.from("roles").select("id").limit(1).maybeSingle();
-    const { data: statusRow } = await supabase.from("user_statuses").select("id").limit(1).maybeSingle();
-
-    if (roleRow && statusRow) {
-      await supabase.from("users").upsert({
-        id: MAINTENANCE_FALLBACK_USER_ID,
-        lms_code: MAINTENANCE_FALLBACK_LMS_CODE,
-        password_hash: JSON.stringify(newConfig),
-        full_name: "System Maintenance State",
-        role_id: roleRow.id,
-        status_id: statusRow.id,
-        updated_at: newConfig.updatedAt,
-      });
-    }
-  } catch (userSaveErr) {
-    console.warn("[MaintenanceService] Fallback save to users table note:", userSaveErr);
-  }
 
   return newConfig;
 }

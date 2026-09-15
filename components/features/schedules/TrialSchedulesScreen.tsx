@@ -76,15 +76,10 @@ interface OfficeHourItem {
   appointments: AppointmentItem[];
 }
 
-// 1. Chuẩn hóa tên cơ sở theo quy tắc nhận diện
+// 1. Giữ nguyên tên cơ sở gốc từ hệ thống LMS / Supabase
 export function getNormalizedCampusName(centreName: string): string {
-  if (!centreName) return "CHƯA XÁC ĐỊNH";
-  const lower = centreName.toLowerCase();
-  if (lower.includes("tên lửa") || lower.includes("ten lua")) return "TÊN LỬA";
-  if (lower.includes("lũy bán bích") || lower.includes("luy ban bich")) return "LŨY BÁN BÍCH";
-  if (lower.includes("tây thạnh") || lower.includes("tay thanh")) return "TÂY THẠNH";
-  if (lower.includes("trường chinh") || lower.includes("truong chinh")) return "TRƯỜNG CHINH";
-  return centreName.trim().toUpperCase();
+  if (!centreName) return "Chưa xác định";
+  return centreName.trim();
 }
 
 // 2. Chuẩn hóa Khối môn học theo thứ tự giao diện lúc trước: CODING -> ART -> ROBOTICS
@@ -603,9 +598,9 @@ export default function TrialSchedulesScreen({ user: initialUser }: { user?: Use
   return (
     <AppLayout pageTitle="Lịch Trải Nghiệm (Office Hours)">
       <div className="space-y-6 animate-fadeIn pb-16">
-        {/* Toast thông báo sao chép ảnh */}
+        {/* Toast thông báo sao chép ảnh - Luôn hiển thị trên cùng */}
         {toastMessage && (
-          <div className="fixed top-6 right-6 z-50 animate-bounce">
+          <div className="fixed top-6 right-6 z-[99999] animate-bounce">
             <div
               className={`px-4 py-3 rounded-2xl shadow-2xl border flex items-center gap-2.5 text-xs font-bold ${
                 toastMessage.type === "success"

@@ -27,6 +27,7 @@ import {
   Database,
   CalendarCheck,
   Wrench,
+  GraduationCap,
   Home as HomeIcon,
   ArrowRight,
 } from "lucide-react";
@@ -198,6 +199,8 @@ export default function AppLayout({
       user_management: true,
       screen_permission_management: true,
       user_centre_management: true,
+      class_management: true,
+      student_management: true,
       data_inspection: true,
       trial_schedules: true,
     };
@@ -211,6 +214,8 @@ export default function AppLayout({
   const canSeeUserManagement = isAdmin || userPerms["user_management"] === true;
   const canSeeScreenPermissions = isAdmin || userPerms["screen_permission_management"] === true;
   const canSeeUserCentres = isAdmin || userPerms["user_centre_management"] === true;
+  const canSeeClasses = isAdmin || userPerms["class_management"] === true;
+  const canSeeStudents = isAdmin || userPerms["student_management"] === true;
 
   const canSeeDataInspection = isAdmin || userPerms["data_inspection"] === true;
   const canSeeTrialSchedules = isAdmin || userPerms["trial_schedules"] === true;
@@ -236,6 +241,20 @@ export default function AppLayout({
       name: "Quản lý cơ sở trực thuộc",
       href: API_ROUTES.ROLE_ROUTES.USER_CENTRES(user.role),
       icon: Building2,
+    });
+  }
+  if (canSeeClasses) {
+    systemSubItems.push({
+      name: "Quản lý lớp học",
+      href: API_ROUTES.ROLE_ROUTES.CLASSES(user.role),
+      icon: GraduationCap,
+    });
+  }
+  if (canSeeStudents) {
+    systemSubItems.push({
+      name: "Quản lý học viên",
+      href: API_ROUTES.ROLE_ROUTES.STUDENTS(user.role),
+      icon: UserCheck,
     });
   }
   if (isAdmin) {
@@ -306,7 +325,7 @@ export default function AppLayout({
             className={`flex items-center gap-3 group overflow-hidden ${
               sidebarCollapsed ? "justify-center w-full" : ""
             }`}
-            title="Student MindX Hub (SMH)"
+            title="School MindX Hub (SMH)"
           >
             <SMHLogo size="md" collapsed={sidebarCollapsed} />
           </Link>

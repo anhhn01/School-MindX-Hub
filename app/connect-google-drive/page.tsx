@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, Suspense } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   ShieldAlert,
@@ -25,12 +26,15 @@ function ConnectGoogleDriveContent() {
   const [checkingConfig, setCheckingConfig] = useState(true);
   const [configured, setConfigured] = useState(true);
   const [authUrl, setAuthUrl] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const [userData, setUserData] = useState<{
+    id?: string;
     name: string;
     role: string;
     lms_code?: string;
   }>({
+    id: "",
     name: "Giáo viên",
     role: "Teacher Part-time",
     lms_code: "",
@@ -38,30 +42,149 @@ function ConnectGoogleDriveContent() {
 
   const errorParam = searchParams.get("error");
 
+  // Helper hoàn tất đồng bộ email Google vào hệ thống
+  const syncGoogleUser = async (
+    email: string,
+    provider_token?: string | null,
+    provider_refresh_token?: string | null,
+    targetUserId?: string
+  ) => {
+    setLoading(true);
+    setErrorMessage(null);
+    try {
+      const res = await fetch("/api/auth/google/callback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email,
+          provider_token: provider_token || undefined,
+          provider_refresh_token: provider_refresh_token || undefined,
+          user_id: targetUserId || userData.id,
+        }),
+      });
+      const resData = await res.json();
+      if (resData.success && resData.redirect_url) {
+        window.location.href = resData.redirect_url;
+        return;
+      } else {
+        setErrorMessage(resData.error || "Không thể hoàn tất liên kết tài khoản Google.");
+      }
+    } catch (err: any) {
+      console.error("Lỗi đồng bộ email Supabase Google:", err);
+      setErrorMessage(err?.message || "Lỗi kết nối máy chủ");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Tải thông tin người dùng và kiểm tra trạng thái cấu hình Google OAuth
   useEffect(() => {
+    // 0. Bắt lỗi từ URL hash (Supabase OAuth thường trả lỗi qua hash)
+    if (typeof window !== "undefined" && window.location.hash) {
+      const hashStr = window.location.hash.substring(1);
+      const hashParams = new URLSearchParams(hashStr);
+      const hashError = hashParams.get("error_description") || hashParams.get("error");
+      if (hashError) {
+        setErrorMessage(decodeURIComponent(hashError));
+      }
+    }
+    if (errorParam) {
+      setErrorMessage(decodeURIComponent(errorParam));
+    }
+
     // 1. Tải thông tin user từ /api/auth/me
     fetch(API_ROUTES.AUTH.ME, { cache: "no-store" })
       .then((res) => res.json())
       .then((data) => {
         if (data.authenticated && data.user) {
           const roleName = data.user.role || "Teacher Part-time";
+          const isPartTime =
+            roleName.toLowerCase().includes("part-time") ||
+            roleName.toLowerCase().includes("parttime");
+
+          const currentUid = data.user.id || "";
           setUserData({
+            id: currentUid,
             name: data.user.name || "Giáo viên",
             role: roleName,
             lms_code: data.user.lms_code || "",
           });
 
-          // Nếu tài khoản này đã có email (đã liên kết xong), tự động chuyển về đúng dashboard của vai trò
-          if (data.user.email && !data.user.requires_google_drive) {
+          // Bắt buộc OAuth CHỈ áp dụng riêng cho Teacher Part-time
+          // Nếu không phải Teacher Part-time, hoặc tài khoản đã có email, tự động chuyển về đúng dashboard
+          if (!isPartTime || (data.user.email && !data.user.requires_google_drive)) {
             const roleSlug = getRoleSlug(roleName);
             router.replace(`/${roleSlug}/dashboard`);
+            return;
           }
+
+          // Kiểm tra xem Supabase đã có session sẵn chưa
+          supabase.auth.getSession().then(({ data: { session }, error: sessionError }) => {
+            if (sessionError) {
+              console.error("Lỗi getSession Supabase:", sessionError);
+            }
+            if (session?.user?.email) {
+              syncGoogleUser(
+                session.user.email,
+                session.provider_token,
+                session.provider_refresh_token,
+                currentUid
+              );
+            }
+          });
         }
       })
       .catch(() => {});
 
-    // 2. Lấy URL OAuth
+    // 2. Lắng nghe phiên đăng nhập OAuth từ Supabase Provider (Google)
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if ((event === "SIGNED_IN" || event === "INITIAL_SESSION") && session?.user?.email) {
+        syncGoogleUser(
+          session.user.email,
+          session.provider_token,
+          session.provider_refresh_token
+        );
+      }
+    });
+
+    // 3. Nếu URL có chứa code từ Supabase redirect (PKCE flow)
+    const codeParam = searchParams.get("code");
+    if (codeParam) {
+      setLoading(true);
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (session?.user?.email) {
+          syncGoogleUser(
+            session.user.email,
+            session.provider_token,
+            session.provider_refresh_token
+          );
+        } else {
+          supabase.auth
+            .exchangeCodeForSession(codeParam)
+            .then(async ({ data: exchangeData, error: exchangeError }) => {
+              if (!exchangeError && exchangeData?.user?.email) {
+                syncGoogleUser(
+                  exchangeData.user.email,
+                  exchangeData.session?.provider_token,
+                  exchangeData.session?.provider_refresh_token
+                );
+              } else if (exchangeError) {
+                console.error("Lỗi exchange code Supabase:", exchangeError);
+              }
+            })
+            .catch((e) => {
+              console.error("Lỗi exchange code Supabase:", e);
+            })
+            .finally(() => {
+              setLoading(false);
+            });
+        }
+      });
+    }
+
+    // 4. Lấy URL OAuth trực tiếp (fallback)
     fetch("/api/auth/google/url", { cache: "no-store" })
       .then((res) => res.json())
       .then((data) => {
@@ -76,19 +199,29 @@ function ConnectGoogleDriveContent() {
       .finally(() => {
         setCheckingConfig(false);
       });
-  }, [router]);
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [router, searchParams, errorParam]);
 
   const handleConnectClick = async () => {
     setLoading(true);
+    setErrorMessage(null);
 
-    // 1. Thử ưu tiên đăng nhập OAuth qua Supabase Auth nếu được kích hoạt
+    // 1. Ưu tiên đăng nhập OAuth qua Supabase Auth (Google Provider)
     try {
       const redirectOrigin = typeof window !== "undefined" ? window.location.origin : "";
       const { data: sbData, error: sbError } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: `${redirectOrigin}/api/auth/google/callback`,
-          scopes: "https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile",
+          redirectTo: `${redirectOrigin}/connect-google-drive`,
+          scopes:
+            "https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile",
+          queryParams: {
+            access_type: "offline",
+            prompt: "consent",
+          },
         },
       });
 
@@ -96,9 +229,12 @@ function ConnectGoogleDriveContent() {
         window.location.href = sbData.url;
         return;
       }
+      if (sbError) {
+        console.warn("Supabase signInWithOAuth error, fallback to direct:", sbError);
+      }
     } catch (_) {}
 
-    // 2. Sử dụng Google OAuth URL trực tiếp từ hệ thống
+    // 2. Sử dụng Google OAuth URL trực tiếp từ hệ thống (fallback)
     if (authUrl) {
       window.location.href = authUrl;
     } else {
@@ -108,14 +244,20 @@ function ConnectGoogleDriveContent() {
           if (data.url) {
             window.location.href = data.url;
           } else {
-            alert(data.message || "Chưa cấu hình Google OAuth credentials.");
+            setErrorMessage(data.message || "Chưa cấu hình Google OAuth credentials.");
             setLoading(false);
           }
         })
         .catch(() => {
           setLoading(false);
-          alert("Có lỗi xảy ra khi khởi tạo kết nối Google Drive.");
+          setErrorMessage("Có lỗi xảy ra khi khởi tạo kết nối Google Drive.");
         });
+    }
+  };
+
+  const handleDirectConnectClick = () => {
+    if (authUrl) {
+      window.location.href = authUrl;
     }
   };
 
@@ -198,13 +340,13 @@ function ConnectGoogleDriveContent() {
             </div>
 
             {/* Error Banner (if error from OAuth) */}
-            {errorParam && (
+            {(errorMessage || errorParam) && (
               <div className="mt-5 p-3.5 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50 flex items-start gap-2.5 text-xs text-rose-700 dark:text-rose-300">
                 <AlertCircle className="w-4 h-4 shrink-0 text-rose-600 dark:text-rose-400 mt-0.5" />
                 <div>
                   <p className="font-bold">Liên kết chưa thành công</p>
                   <p className="mt-0.5 opacity-90">
-                    Mã lỗi: <span className="font-mono">{errorParam}</span>. Vui lòng thử lại.
+                    {errorMessage || `Mã lỗi: ${errorParam}. Vui lòng thử lại.`}
                   </p>
                 </div>
               </div>
@@ -250,7 +392,7 @@ function ConnectGoogleDriveContent() {
                 {loading ? (
                   <span className="inline-flex items-center gap-2">
                     <span className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
-                    <span>Đang chuyển hướng tới Google...</span>
+                    <span>Đang xử lý kết nối Google...</span>
                   </span>
                 ) : (
                   <>
@@ -261,6 +403,17 @@ function ConnectGoogleDriveContent() {
                 )}
               </button>
 
+              {authUrl && (
+                <button
+                  onClick={handleDirectConnectClick}
+                  disabled={loading}
+                  type="button"
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 border border-rose-200 dark:border-rose-900/40 transition-colors cursor-pointer"
+                >
+                  <span>Hoặc liên kết trực tiếp bằng Google OAuth</span>
+                </button>
+              )}
+
               <button
                 onClick={handleLogout}
                 className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold text-slate-500 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-slate-100 dark:hover:bg-slate-900/60 transition-colors cursor-pointer"
@@ -268,6 +421,17 @@ function ConnectGoogleDriveContent() {
                 <LogOut className="w-3.5 h-3.5 shrink-0" />
                 <span>Đăng xuất khỏi tài khoản này</span>
               </button>
+
+              <div className="pt-2 text-center">
+                <Link
+                  href="/privacy"
+                  target="_blank"
+                  className="inline-flex items-center gap-1 text-[11px] text-slate-400 dark:text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 transition-colors hover:underline"
+                >
+                  <ShieldAlert className="w-3 h-3" />
+                  <span>Chính sách quyền riêng tư & bảo mật Google</span>
+                </Link>
+              </div>
             </div>
           </div>
         </div>

@@ -12,7 +12,7 @@ export default function SystemFooter() {
           <SMHLogo size="sm" showText={false} href="/" />
           <div>
             <p className="font-extrabold text-slate-900 dark:text-white tracking-tight">
-              Student MindX Hub (SMH)
+              School MindX Hub (SMH)
             </p>
             <p className="text-slate-600 dark:text-slate-400 text-[11px] font-medium">
               Website nội bộ được xây dựng bởi{" "}
@@ -25,8 +25,15 @@ export default function SystemFooter() {
 
         {/* Cột 2: Bản quyền & Phiên bản mới nhất có link đến Changelog */}
         <div className="text-slate-500 dark:text-slate-400 text-center sm:text-right text-[11px] space-y-0.5">
-          <p className="whitespace-nowrap">
-            © {new Date().getFullYear()} Student MindX Hub. All rights reserved.
+          <p className="whitespace-nowrap flex items-center justify-center sm:justify-end gap-1.5">
+            <span>© {new Date().getFullYear()} School MindX Hub.</span>
+            <span>•</span>
+            <Link
+              href="/privacy"
+              className="text-slate-500 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition-colors hover:underline"
+            >
+              Chính sách quyền riêng tư
+            </Link>
           </p>
           <p className="text-[11px] whitespace-nowrap">
             <Link

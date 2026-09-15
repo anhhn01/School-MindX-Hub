@@ -8,6 +8,10 @@ import {
   Settings,
   Users,
   KeyRound,
+  Building2,
+  GraduationCap,
+  CalendarDays,
+  UserCheck,
   RefreshCw,
   CheckCircle2,
   AlertCircle,
@@ -100,17 +104,23 @@ export default function ScreenPermissionScreen() {
       const rolePerms = { ...(prev[roleName] || {}) };
       if (isParent) {
         rolePerms[menuCode] = newValue;
-        if (!newValue) {
-          rolePerms["user_management"] = false;
-          rolePerms["screen_permission_management"] = false;
-        } else {
-          rolePerms["user_management"] = true;
-          rolePerms["screen_permission_management"] = true;
+        // Bật / Tắt TOÀN BỘ các menu con của menu chính này
+        const parentMenu = menus.find((m) => m.code === menuCode);
+        if (parentMenu && parentMenu.children) {
+          for (const child of parentMenu.children) {
+            rolePerms[child.code] = newValue;
+          }
         }
       } else {
         rolePerms[menuCode] = newValue;
         if (newValue) {
-          rolePerms["system_management"] = true;
+          // Bật menu con -> tự động bật menu chính tương ứng
+          const parentMenu = menus.find((m) =>
+            m.children?.some((c) => c.code === menuCode)
+          );
+          if (parentMenu) {
+            rolePerms[parentMenu.code] = true;
+          }
         }
       }
 
@@ -327,19 +337,25 @@ export default function ScreenPermissionScreen() {
                               <span className="w-1.5 h-1.5 rounded-full bg-slate-300 dark:bg-slate-700 shrink-0" />
                               {child.code === "user_management" ? (
                                 <Users className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                              ) : (
+                              ) : child.code === "screen_permission_management" ? (
                                 <KeyRound className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                              ) : child.code === "user_centre_management" ? (
+                                <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                              ) : child.code === "class_management" ? (
+                                <GraduationCap className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                              ) : child.code === "student_management" ? (
+                                <UserCheck className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                              ) : child.code === "trial_schedules" ? (
+                                <CalendarDays className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                              ) : (
+                                <Settings className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                               )}
                               <span>{child.name}</span>
                             </div>
                           </td>
                           <td className="py-2 px-3 text-xs font-mono text-center whitespace-nowrap">
                             <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-900 text-rose-600 dark:text-rose-400 border border-slate-200 dark:border-slate-800 text-[11px]">
-                              {child.code === "user_management"
-                                ? `/[role]/system-management/users`
-                                : child.code === "screen_permission"
-                                ? `/[role]/system-management/screen_permission`
-                                : `/[role]/.../${child.code}`}
+                              {child.path || `/[role]/.../${child.code}`}
                             </span>
                           </td>
                           {roles.map((role) => {

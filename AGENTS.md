@@ -1,4 +1,4 @@
-# Dự Án SMH (Student MindX Hub) - Quyết Định & Quy Tắc Thiết Kế
+# Dự Án SMH (School MindX Hub) - Quyết Định & Quy Tắc Thiết Kế
 
 ## Ràng Buộc Sử Dụng MCP Server & Skills
 
@@ -31,7 +31,7 @@ Agent khi thực hiện phát triển tính năng (Features), sửa lỗi (Debug
     - Tuyến phân quyền màn hình bắt buộc có tên chứa `screen_permission`: `/[role]/system-management/screen_permission`.
     - **Chặn Truy Cập Chéo Vai Trò & Chặn Không Có Quyền**: Bất kỳ người dùng nào cố tình truy cập vào route mang tiền tố của vai trò khác (hoặc route chưa được phân quyền) đều bị Middleware chặn và **trả về trực tiếp trang 404 (`not-found`)**.
 14. **Quy Chuẩn Layout Thống Nhất Toàn Hệ Thống (Header, Footer & Collapsible Sidebar)**:
-    - **Đồng bộ Header & Footer**: Bất kỳ giao diện nào (Dashboard, Quản lý, Phân quyền, Đăng nhập, 404 Not Found) đều phải có Header và Footer đồng nhất với nhận diện thương hiệu *Student MindX Hub (SMH)*.
+    - **Đồng bộ Header & Footer**: Bất kỳ giao diện nào (Dashboard, Quản lý, Phân quyền, Đăng nhập, 404 Not Found) đều phải có Header và Footer đồng nhất với nhận diện thương hiệu *School MindX Hub (SMH)*.
     - **Vị Trí Tình Trạng Hệ Thống**: Thông tin trạng thái vận hành hệ thống ("Hệ thống hoạt động ổn định 100% • Supabase DB Connected • Bảo Mật RBAC") được đặt cố định ở **Footer** kèm bản quyền và phiên bản hệ thống, không đặt thẻ trùng lặp trong phần nội dung chính của Dashboard.
     - **Sidebar Thu Gọn (Collapsible)**: Sidebar bên trái hỗ trợ nút thu gọn (Collapse) thành cột icon 80px tinh gọn hoặc mở rộng 288px, ghi nhớ trạng thái thu gọn qua `localStorage`.
 15. **Phân Định Dữ Liệu & Thao Tác Theo Cấp Bậc Vai Trò (Role Hierarchy Scope)**:
@@ -53,15 +53,15 @@ Agent khi thực hiện phát triển tính năng (Features), sửa lỗi (Debug
     - **Bắt buộc bọc bằng AppLayout**: Màn hình lịch trải nghiệm phải kế thừa `AppLayout` đầy đủ Sidebar bên trái, Header người dùng bên trên và Footer thông tin hệ thống bên dưới.
 18. **Quy Chuẩn Tài Khoản Kiểm Thử Chính Thức (Official Test Accounts Standard)**:
     - Khi thực hiện kiểm thử tự động, kiểm tra giao diện hay kiểm thử API, Agent **bắt buộc sử dụng bộ tài khoản chính thức sau, tuyệt đối không nhập lan man**:
-      - **Admin**: `admin` / `Nh@t@nh12@8` (Sở hữu đầy đủ 101 cơ sở trực thuộc và toàn quyền quản trị).
+      - **Admin**: `admin` / `Nh@t@nh12@8` (Sở hữu đầy đủ 56 cơ sở trực thuộc và toàn quyền quản trị).
       - **Teacher Full-time**: `anhhn01` / `Nh@t@nh12@8` (Thuộc 4 cơ sở trực thuộc và phân quyền full-time).
       - **Teacher Part-time**: `huynhnhatanh` / `Nh@t@nh12@8` (Thuộc 4 cơ sở trực thuộc và phân quyền part-time).
 19. **Cơ Chế Bảo Mật JWT & Thời Gian Duy Trì Tài Khoản Cố Định 30 Ngày (JWT Security & 30-Day Session Standard)**:
     - Secret key tạo JWT đặt tại `.env` với biến `JWT_SECRET=student-mindx-hub`.
     - Token định danh `smh_token` được ký thuật toán `HS256` qua thư viện `jose`, lưu trong HttpOnly cookie an toàn.
     - **Thời gian duy trì tài khoản (Session Maintenance)**: Cố định hết hạn sau **30 ngày** cho toàn bộ tài khoản. Khi token hết hạn, Middleware tự động xóa phiên và đẩy về trang đăng nhập (`/login?redirect=...&reason=expired`).
-20. **Danh Mục 101 Cơ Sở LMS & Tiêu Chuẩn Xuất Ảnh Lịch Trải Nghiệm Không Bị Đen (LMS Centres & Zero-Black Export Standard)**:
-    - Hệ thống áp dụng danh mục đầy đủ **101 cơ sở chính thống** từ MindX LMS GraphQL (`OFFICIAL_LMS_CENTRES`), tài khoản `admin` được gán toàn bộ 101 cơ sở này để kiểm tra toàn hệ thống.
+20. **Danh Mục 56 Cơ Sở MindX Chính Thống & Tiêu Chuẩn Xuất Ảnh Lịch Trải Nghiệm Không Bị Đen (LMS Centres & Zero-Black Export Standard)**:
+    - Hệ thống áp dụng danh mục đầy đủ **56 cơ sở vật lý chính thống** từ MindX (loại bỏ các nhóm miền, hotline, online và mầm non đối tác), tài khoản `admin` được gán toàn bộ 56 cơ sở này để kiểm tra toàn hệ thống.
     - Vùng xuất ảnh sao chép lịch trải nghiệm (cả từng cơ sở và toàn bộ cơ sở) phải được cô lập trong wrapper tọa độ riêng biệt, đảm bảo thẻ được chụp luôn giữ tọa độ `left: 0; position: relative` và tính toán `scrollHeight` đầy đủ để triệt tiêu 100% hiện tượng ảnh xuất ra bị đen hoặc mất nội dung. Ảnh sao chép toàn bộ cơ sở bắt buộc có banner tiêu đề tổng thể nổi bật.
 21. **Quy Chuẩn Ràng Buộc Dữ Liệu & Xác Thực Toàn Hệ Thống (Comprehensive Data Validation & Constraints Standard)**:
     - **Hồ sơ cá nhân (`/profile`)**:
@@ -76,6 +76,7 @@ Agent khi thực hiện phát triển tính năng (Features), sửa lỗi (Debug
     - Form đăng nhập hỗ trợ tính năng gợi ý tài khoản đã lưu trên trình duyệt (`autoComplete="username"`, `name="username"`).
     - Ngăn chặn trình duyệt tự động điền sẵn thông tin khi vừa tải trang thông qua cơ chế kích hoạt tương tác (`readOnly` ban đầu, tự gỡ bỏ khi người dùng nhấp/chạm vào ô nhập) để đảm bảo tính riêng tư mà vẫn mở gợi ý đầy đủ khi người dùng tương tác.
 23. **Quy Chuẩn Quy Trình Đẩy Code Git & Cập Nhật Phiên Bản (Git Push & Version Update Standard)**:
+    - **RÀNG BUỘC TUYỆT ĐỐI VỀ QUYỀN PUSH**: Agent **CHỈ ĐƯỢC PHÉP THỰC HIỆN ĐẨY CODE LÊN GIT (GIT PUSH) KHI ĐƯỢC NGƯỜI DÙNG YÊU CẦU HOẶC CHO PHÉP RÕ RÀNG**. Tuyệt đối **KHÔNG TỰ Ý CHẠY `git push`** trong bất kỳ hoàn cảnh nào nếu người dùng chưa ra lệnh.
     - Khi người dùng yêu cầu push code lên Git, Agent **bắt buộc tuân thủ đúng trình tự các bước sau**:
       1. Rà soát `.gitignore` và loại bỏ triệt để các file nhạy cảm, file tạm thời, file rác/scratch.
       2. **Cập nhật phiên bản hệ thống tập trung tại `lib/constants/version.ts`**: Khi có tính năng mới, bắt buộc tăng số hiệu phiên bản (`vx.x`, ví dụ `v1.5`), cập nhật ngày phát hành và tóm tắt các chức năng chính (ngắn gọn, không quá chuyên môn).
@@ -92,7 +93,7 @@ Agent khi thực hiện phát triển tính năng (Features), sửa lỗi (Debug
     - Hiển thị số lượt truy cập trang web thực tế được định dạng chuẩn Việt Nam (ví dụ: `1.431 lượt truy cập`), kết hợp cơ chế lưu trữ bền vững tại `data/site_stats.json`.
 25. **Quy Chuẩn Chế Độ Bảo Trì Hệ Thống Đa Môi Trường & Màn Hình Bảo Trì Cố Định (Production Persistent Maintenance Mode Standard)**:
     - Quản trị viên (Admin) quản lý bảo trì tại `/[role]/system-management/maintenance`.
-    - **Lưu trữ bền vững trên Production qua Supabase Database**: Trạng thái bảo trì được lưu trữ bền vững tại bảng `system_settings` trên Supabase (kèm cơ chế fallback bản ghi hệ thống `__system_maintenance__` trong `users` và bộ đệm in-memory TTL 3s). Nhờ vậy trên môi trường Production (như Vercel serverless), `middleware.ts` truy vấn trực tiếp Supabase REST API và chặn 100% người dùng các role khác về trang `/maintenance` một cách triệt để, không bị ảnh hưởng bởi tính vô trạng thái của serverless filesystem.
+    - **Lưu trữ bền vững trên Production qua Supabase Database**: Trạng thái bảo trì được lưu trữ bền vững tại bảng chuyên biệt `system_settings` trên Supabase (khóa `key = 'maintenance_status'`, `value = jsonb`). Tuyệt đối không chèn bản ghi dummy vào bảng `users`. Trên môi trường Production (như Vercel serverless), `middleware.ts` truy vấn trực tiếp bảng `system_settings` qua Supabase REST API và chặn 100% người dùng các role khác về trang `/maintenance` một cách triệt để, không bị ảnh hưởng bởi tính vô trạng thái của serverless filesystem.
     - **Màn hình bảo trì xuất hiện đầu tiên & cố định liên tục**: Khi kích hoạt bảo trì, toàn bộ người dùng (kể cả truy cập Trang chủ `/` hay `/login` thông thường) đều bị Middleware chuyển hướng ngay lập tức về trang `/maintenance` và lưu lại ở đó liên tục cho đến khi bảo trì kết thúc. Tuyệt đối không chỉ hiển thị một thông báo thông thường rồi cho ở lại trang khác.
     - **Kênh đăng nhập đặc thù cho Quản trị viên**: Trên trang `/maintenance`, chỉ Quản trị viên mới có thể nhấp nút "Quản trị viên đăng nhập" (`/login?admin=1`) để truy cập form đăng nhập quản trị. Nếu tài khoản không phải Admin cố tình đăng nhập trong thời gian bảo trì, hệ thống từ chối và điều hướng ngay về `/maintenance`.
     - Hỗ trợ ô nhập ngày giờ dự kiến kết thúc (`datetime-local`). Nếu để trống, hệ thống tự động thiết lập mặc định là **3 tiếng** kể từ thời điểm bật. Khi quá thời gian dự kiến, hệ thống tự động mở khóa bảo trì.
@@ -126,6 +127,57 @@ Agent khi thực hiện phát triển tính năng (Features), sửa lỗi (Debug
       - Khối Tiêu đề: Khung icon đại diện kích thước chuẩn `w-12 h-12 rounded-2xl bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20`, tiêu đề in hoa đậm (`font-black tracking-wide text-xl sm:text-2xl`), và phụ đề ngắn gọn 1 dòng súc tích (`text-xs sm:text-sm text-slate-500 dark:text-slate-400`).
       - Khối Hành động: Đặt toàn bộ các nút thao tác nghiệp vụ, nút làm mới, nút thêm mới gọn gàng ở phía bên phải.
     - **Tuyệt Đối Không Thêm Văn Bản / Ghi Chú Giải Thích Hướng Dẫn**: Không được phép tự ý thêm các khối ghi chú, hộp cảnh báo, banner hướng dẫn dài dòng ("Tại sao cần làm...", "Lưu ý khi sử dụng...", "👉 Vuốt ngang để xem...") vào bất kỳ màn hình nào trừ khi có yêu cầu cụ thể từ người dùng. Giao diện phải sạch sẽ, tinh gọn, tập trung hoàn toàn vào dữ liệu và tác vụ.
+32. **Quy Chuẩn Bắt Buộc OAuth Riêng Cho Teacher Part-Time & Tính Năng Hủy Liên Kết (Google Drive OAuth Scope & Unlink Standard)**:
+    - Cơ chế bắt buộc OAuth Google Drive chỉ áp dụng DUY NHẤT cho vai trò `Teacher Part-time` khi email trong Supabase còn trống. Tài khoản `Teacher Full-time` và `Admin` không bị ép buộc liên kết.
+    - **Hủy liên kết Google Drive**:
+      - Người dùng có thể tự hủy liên kết tài khoản Google Drive của mình tại trang Hồ sơ cá nhân (`/profile`).
+      - Trong màn hình Quản lý tài khoản (`/[role]/system-management/users`), người dùng có vai trò cấp bậc cao hơn (`callerPoints < targetPoints`) có quyền hủy liên kết Google Drive cho các tài khoản cấp dưới (tuyệt đối không được hủy liên kết của chính mình tại đây hoặc của người có cấp bậc bằng/cao hơn).
+33. **Quy Chuẩn Quản Lý Lớp Học, Hạn Nộp Bài & Lưu Trữ Supabase Độc Quyền (Class Management & Supabase Exclusive Storage Standard)**:
+    - Màn hình Quản lý lớp học đặt tại **QUẢN LÝ HỆ THỐNG** với đường dẫn chuẩn: `/[role]/system-management/classes`.
+    - **Lưu trữ độc quyền Supabase Bền Vững Đa Môi Trường**:
+      - Toàn bộ dữ liệu lớp học quản lý và hạn nộp bài tùy chỉnh được lưu trữ độc quyền trên bảng chuyên biệt `managed_classes` trên Supabase Database, đảm bảo hoạt động bền vững 100% trên Vercel Production Serverless.
+      - Tuyệt đối KHÔNG làm thay đổi bất kỳ dữ liệu nào trên LMS MindX (chỉ dùng Read-only GraphQL).
+    - **Tìm kiếm real-time theo tên/mã lớp & Chống spam 429 (Debounce 1s)**:
+      - Ô tìm kiếm gọi query LMS với debounce **1000ms (1 giây)** khi người dùng dừng nhập để chống lỗi 429 Too Many Requests, kết hợp bộ lọc client-side lọc tức thì trên dữ liệu đã tải.
+      - Hỗ trợ dropdown hiển thị kết quả khớp từ khóa, phím tắt mũi tên lên/xuống và Enter để chọn nhanh.
+    - **Ràng buộc trạng thái lớp khi thêm (Chỉ OPEN hoặc RUNNING, cấm FINISHED)**:
+      - Hệ thống **CHỈ hỗ trợ thêm các lớp đang mở (OPEN) hoặc đang học (RUNNING)** vào danh sách quản lý.
+      - Tuyệt đối **KHÔNG cho phép thêm các lớp đã kết thúc (FINISHED)**. Dropdown loại trừ các lớp FINISHED; nếu tìm kiếm hoặc chọn lớp FINISHED, hệ thống từ chối và báo lỗi rõ ràng.
+    - **Phân quyền thêm lớp học theo vai trò**:
+      - **Admin & Teacher Full-time**: Có quyền tìm kiếm & thêm **tất cả** các lớp học thuộc danh sách cơ sở trực thuộc được phân công vào Supabase.
+      - **Teacher Part-time**: Được quyền tìm kiếm & thêm **các lớp do chính mình phụ trách giảng dạy** vào hệ thống quản lý.
+    - **Bộ lọc, Sắp xếp & Phân trang 20 lớp / Trang (Pagination & Sort Standard)**:
+      - **Bộ lọc**: Ô tìm kiếm mã lớp/khóa học/giáo viên/cơ sở (có nút xóa `X`), dropdown lọc theo cơ sở trực thuộc (`userCentres`), dropdown lọc theo trạng thái (`Tất cả`, `Đang học`, `Sắp mở`, `Đã kết thúc`).
+      - **Sắp xếp (`sortBy`)**: Mới nhất/cũ nhất (ngày bắt đầu), Mã lớp A → Z / Z → A, Tiến độ cao → thấp / thấp → cao, Số buổi nhiều nhất, Mới thêm vào hệ thống.
+      - **Phân trang (20 lớp / trang)**: Cố định 20 lớp mỗi trang, STT liên tục, hỗ trợ **ô nhập số trang trực tiếp (Jump to page input)** để nhảy trang nhanh, nút Trang đầu, Trước, Kế, Cuối và thống kê số lượng hiển thị.
+    - **Bảng danh sách chỉ hiển thị khi đã thêm vào Supabase**: Bảng tổng quan bên dưới ban đầu để trống nếu chưa có lớp nào được thêm. Bảng chỉ hiển thị dữ liệu các lớp đã được lưu trong Supabase.
+    - **Xác định Giáo viên phụ trách (dạy nhiều buổi nhất & đồng hạng)**: Giáo viên phụ trách lớp được tính dựa trên số buổi dạy (slots) nhiều nhất từ LMS. Nếu có từ 2 giáo viên cùng có số buổi dạy cao nhất bằng nhau, hiển thị đầy đủ tất cả các giáo viên đó (`GV 1, GV 2`).
+    - **Phân quyền tìm kiếm & xem lớp học theo vai trò**:
+      - **Admin & Teacher Full-time**: Được tìm kiếm và xem **TẤT CẢ** các lớp ở trạng thái opening, running và finished tại các cơ sở trực thuộc được phân công.
+      - **Teacher Part-time**: **CHỈ** xem được các lớp do chính giáo viên đó phụ trách (nếu tìm kiếm lớp khác sẽ thông báo không tìm thấy).
+    - **Ràng buộc thêm lớp học (Bắt buộc Giáo viên có tài khoản Supabase)**: Khi thêm lớp học, hệ thống bắt buộc kiểm tra xem giáo viên phụ trách lớp đã tồn tại tài khoản trong Supabase (`users`) hay chưa. Nếu chưa, từ chối thêm và báo lỗi chính xác: *"Tài khoản này chưa được cấp quyền truy cập vào website này"*.
+    - **Bảng tổng quan 10 cột chuẩn**: STT, Mã Lớp & Khóa Học, Cơ Sở, Giáo Viên Phụ Trách, Giờ Học (ví dụ `18:00 - 20:00`), Ngày Bắt Đầu, Ngày Kết Thúc, Tiến Độ, Trạng Thái, Thao Tác (căn giữa toàn bộ cột trừ Mã Lớp và Cơ Sở).
+    - **Modal chi tiết lớp học & Hạn nộp bài**:
+      - Bỏ hoàn toàn cột "Tóm tắt nội dung" và 3 card mốc đánh giá riêng lẻ để bảng lịch trình được nâng cao tối đa.
+      - Hiển thị đầy đủ Giờ học và Giáo viên phụ trách.
+      - Bảng lịch trình chi tiết có cột "Hạn nộp bài" cho phép người dùng chỉnh sửa trực tiếp.
+      - Quy tắc hạn nộp bài mặc định: Buổi 1 đến Checkpoint 2 là `[Bắt đầu] - [Kết thúc, Ngày học]` của từng buổi. Giai đoạn Sản phẩm cuối khóa (từ buổi ngay sau Checkpoint 2 đến buổi cuối): tất cả các buổi trong giai đoạn này đều có chung hạn nộp thống nhất từ buổi sau CP2 đến buổi cuối.
+      - Khi thêm mới: Dưới cùng có 2 nút [Thêm] (lưu vào Supabase) và [Hủy].
+    - **Đồng bộ chọn lọc từng trường từ LMS (Granular Selective Field Sync)**:
+      - Khi nhấn "Tải dữ liệu từ LMS", hệ thống đối chiếu với LMS GraphQL thời gian thực.
+      - Nếu có khác biệt, mở Modal đối chiếu 4 cột có Checkbox cho từng thuộc tính thay đổi (Giáo viên, Giờ học, Ngày kết thúc, Trạng thái, v.v.) kèm nút "Chọn tất cả" / "Bỏ chọn tất cả".
+      - Chỉ ghi đè đúng các trường được người dùng tích chọn, giữ nguyên các trường khác và bảo toàn 100% hạn nộp bài tùy chỉnh.
+34. **Quy Chuẩn Danh Mục 56 Cơ Sở MindX Chính Thống (56 Official MindX Campuses Standard)**:
+    - Hệ thống áp dụng danh mục chuẩn hóa đúng **56 cơ sở vật lý chính thống** của MindX trên toàn quốc (loại bỏ 15 nhóm/hotline/phòng ban/online/đối tác mầm non). Admin được phân công toàn bộ 56 cơ sở này.
+35. **Quy Chuẩn Quản Lý Học Viên Độc Lập & Bảng Chuyên Biệt (`managed_students`)**:
+    - Dữ liệu học viên được lưu trữ trong bảng quan hệ chuyên biệt `managed_students` trên Supabase, liên kết khóa ngoại với lớp học: `class_id REFERENCES managed_classes(id) ON DELETE CASCADE`.
+    - Khi một lớp học bị xóa khỏi bảng `managed_classes`, toàn bộ học viên thuộc lớp đó tự động được xóa cascade bởi PostgreSQL DB.
+    - Màn hình Quản lý học viên hoạt động độc lập tại `/[role]/system-management/students`, tách biệt hoàn toàn khỏi Quản lý lớp học và có mã phân quyền `student_management` riêng biệt.
+    - Bảng `users` trong Supabase được bảo vệ sạch sẽ 100%, chỉ chứa tài khoản người dùng thực tế, tuyệt đối cấm chèn các hàng dummy.
+36. **Quy Chuẩn Triệt Tiêu Thông Báo & Hộp Thoại Mặc Định Của Trình Duyệt (Zero Browser Default Dialog Standard)**:
+    - Tuyệt đối **KHÔNG ĐƯỢC PHÉP sử dụng các thông báo hay hộp thoại mặc định của trình duyệt** (`alert()`, `confirm()`, `prompt()`) trong toàn bộ mã nguồn của hệ thống.
+    - **Thông báo phản hồi (Feedback Toasts)**: Bắt buộc sử dụng component Toast tùy biến chuyên nghiệp (`@/components/common/Toast`) với hiệu ứng hoạt họa trượt mượt mà (`animate-in fade-in slide-in-from-top-3`), phân loại sắc thái rõ ràng (Thành công: `bg-emerald-500`, Lỗi: `bg-rose-500`, Thông tin: `bg-slate-900 dark:bg-[#0B0F17]`), tự động ẩn sau 3.5 - 4.5 giây và tích hợp 100% icon chính thống từ `lucide-react` (`Check`, `AlertCircle`, `CheckCircle2`).
+    - **Hộp thoại xác nhận thao tác (Confirmation Modals)**: Bắt buộc sử dụng modal xác nhận chuyên biệt (`@/components/common/ConfirmModal`) có lớp phủ làm mờ (`backdrop-blur-sm`), phân loại nguy cơ (`danger` cho hành động xóa vĩnh viễn / gỡ dữ liệu; `warning` cho hành động hủy liên kết Google Drive), hiển thị rõ đối tượng chịu tác động và nút bấm có trạng thái quay vòng tải (`Loader2`) chống bấm đúp (double-click). Giao diện tương thích hoàn hảo chế độ Sáng / Tối.
 
 <!-- BEGIN:nextjs-agent-rules -->
 

@@ -22,7 +22,7 @@ export async function GET() {
 
     const mainQuery = await supabase
       .from("users")
-      .select("id, lms_code, full_name, created_at, password_hash, is_firebase, user_statuses(name), roles(name)")
+      .select("id, lms_code, full_name, email, created_at, password_hash, is_firebase, user_statuses(name), roles(name)")
       .order("created_at", { ascending: false });
 
     users = mainQuery.data;
@@ -32,7 +32,7 @@ export async function GET() {
     if (error && error.message?.includes("is_firebase")) {
       const fallbackQuery = await supabase
         .from("users")
-        .select("id, lms_code, full_name, created_at, password_hash, user_statuses(name), roles(name)")
+        .select("id, lms_code, full_name, email, created_at, password_hash, user_statuses(name), roles(name)")
         .order("created_at", { ascending: false });
       users = fallbackQuery.data;
       error = fallbackQuery.error;
@@ -45,7 +45,7 @@ export async function GET() {
 
     // Join & format user_statuses and roles as text strings without foreign key IDs
     const formattedUsers = (users || [])
-      .filter((u: any) => u.lms_code !== "__system_maintenance__")
+      .filter((u: any) => !u.lms_code?.startsWith("__"))
       .map((u: any) => {
       const statusObj = Array.isArray(u.user_statuses) ? u.user_statuses[0] : u.user_statuses;
       const roleObj = Array.isArray(u.roles) ? u.roles[0] : u.roles;
@@ -63,6 +63,7 @@ export async function GET() {
         id: u.id,
         lms_code: u.lms_code,
         full_name: u.full_name,
+        email: u.email || null,
         created_at: u.created_at,
         is_firebase: isLmsAccount,
         status: statusCode, // Text representation instead of status_id

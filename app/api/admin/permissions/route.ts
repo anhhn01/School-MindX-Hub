@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getRolePoints } from "@/lib/constants/roles";
 import {
-  getMemoryPermissions,
-  updateMemoryPermissions,
+  getAllPermissionsMap,
+  saveAllPermissionsMap,
 } from "@/lib/services/permissions-service";
 
 const supabaseUrl = process.env.SUPABASE_URL;
@@ -46,6 +46,22 @@ const DEFAULT_MENU_TREE = [
         code: "user_centre_management",
         name: "Quản lý cơ sở trực thuộc",
         path: "/[role]/system-management/user_centres",
+        is_parent: false,
+        parent_code: "system_management",
+      },
+      {
+        id: "menu_class_management",
+        code: "class_management",
+        name: "Quản lý lớp học",
+        path: "/[role]/system-management/classes",
+        is_parent: false,
+        parent_code: "system_management",
+      },
+      {
+        id: "menu_student_management",
+        code: "student_management",
+        name: "Quản lý học viên",
+        path: "/[role]/system-management/students",
         is_parent: false,
         parent_code: "system_management",
       },
@@ -113,36 +129,22 @@ export async function GET() {
       }));
     }
 
-    // 3. Khởi tạo phân quyền mặc định
-    const cachedPerms = getMemoryPermissions();
-    let permissionsResult: Record<string, Record<string, boolean>> = {};
+    // 3. Lấy phân quyền từ Supabase Database (với fallback bền vững đa tầng)
+    const permissionsResult = await getAllPermissionsMap();
 
     for (const r of roles) {
-      permissionsResult[r.name] = cachedPerms[r.name] || {
-        system_management: false,
-        user_management: false,
-        screen_permission_management: false,
-      };
-    }
-
-    // 4. Ưu tiên truy vấn trực tiếp từ bảng role_menu_permissions trên Supabase
-    const { data: dbPerms, error: permError } = await supabase
-      .from("role_menu_permissions")
-      .select("is_enabled, roles ( name ), menus ( code )");
-
-    if (!permError && dbPerms && dbPerms.length > 0) {
-      for (const row of dbPerms as any[]) {
-        const roleName = row.roles?.name;
-        const menuCode = row.menus?.code;
-        if (roleName && menuCode) {
-          if (!permissionsResult[roleName]) {
-            permissionsResult[roleName] = {};
-          }
-          permissionsResult[roleName][menuCode] = row.is_enabled;
-        }
+      if (!permissionsResult[r.name]) {
+        permissionsResult[r.name] = {
+          system_management: false,
+          user_management: false,
+          screen_permission_management: false,
+          user_centre_management: false,
+          class_management: false,
+          student_management: false,
+          data_inspection: true,
+          trial_schedules: true,
+        };
       }
-      // Cập nhật lại cache đồng bộ từ database
-      updateMemoryPermissions(permissionsResult);
     }
 
     // Đảm bảo Admin luôn có full quyền truy cập
@@ -150,6 +152,11 @@ export async function GET() {
       permissionsResult["Admin"]["system_management"] = true;
       permissionsResult["Admin"]["user_management"] = true;
       permissionsResult["Admin"]["screen_permission_management"] = true;
+      permissionsResult["Admin"]["user_centre_management"] = true;
+      permissionsResult["Admin"]["class_management"] = true;
+      permissionsResult["Admin"]["student_management"] = true;
+      permissionsResult["Admin"]["data_inspection"] = true;
+      permissionsResult["Admin"]["trial_schedules"] = true;
     }
 
     return NextResponse.json({
@@ -196,84 +203,45 @@ export async function PUT(request: NextRequest) {
     }
 
     // Lấy thông tin cây menu để xác định Parent hay Child
-    const isParent = menu_code === "system_management";
-    const childCodes = ["user_management", "screen_permission_management"];
+    const parentMenu = DEFAULT_MENU_TREE.find((m) => m.code === menu_code);
+    const isParent = !!parentMenu;
 
-    const allPerms = getMemoryPermissions();
+    const allPerms = await getAllPermissionsMap();
     if (!allPerms[role_name]) {
       allPerms[role_name] = {
         system_management: false,
         user_management: false,
         screen_permission_management: false,
+        user_centre_management: false,
+        class_management: false,
+        data_inspection: false,
+        trial_schedules: false,
       };
     }
 
     // LOGIC CASCADE PHÂN QUYỀN MÀN HÌNH
-    if (isParent) {
-      if (is_enabled === false) {
-        // Tắt menu chính -> Tắt tất cả các menu phụ
-        allPerms[role_name]["system_management"] = false;
-        for (const child of childCodes) {
-          allPerms[role_name][child] = false;
-        }
-      } else {
-        // Bật menu chính -> Bật sáng tất cả các menu phụ lên hết
-        allPerms[role_name]["system_management"] = true;
-        for (const child of childCodes) {
-          allPerms[role_name][child] = true;
-        }
+    if (isParent && parentMenu) {
+      allPerms[role_name][menu_code] = is_enabled;
+      // Bật/Tắt menu chính -> Bật/Tắt TOÀN BỘ các menu con của nó
+      for (const child of parentMenu.children || []) {
+        allPerms[role_name][child.code] = is_enabled;
       }
     } else {
       // Toggle menu phụ
+      allPerms[role_name][menu_code] = is_enabled;
       if (is_enabled === true) {
         // Bật menu phụ -> tự động bật menu chính nếu đang tắt
-        allPerms[role_name]["system_management"] = true;
-        allPerms[role_name][menu_code] = true;
-      } else {
-        // Tắt menu phụ riêng lẻ khi menu chính đang bật
-        allPerms[role_name][menu_code] = false;
-      }
-    }
-
-    // Cập nhật bộ nhớ cache
-    updateMemoryPermissions(allPerms);
-
-    // Lưu trực tiếp vào Supabase Database
-    try {
-      const { data: roleRow } = await supabase
-        .from("roles")
-        .select("id")
-        .eq("name", role_name)
-        .maybeSingle();
-
-      if (roleRow) {
-        const { data: menusRows } = await supabase
-          .from("menus")
-          .select("id, code");
-
-        if (menusRows && menusRows.length > 0) {
-          const updates: { role_id: string; menu_id: string; is_enabled: boolean }[] = [];
-          for (const [code, enabled] of Object.entries(allPerms[role_name])) {
-            const menuObj = menusRows.find((m) => m.code === code);
-            if (menuObj) {
-              updates.push({
-                role_id: roleRow.id,
-                menu_id: menuObj.id,
-                is_enabled: enabled,
-              });
-            }
-          }
-
-          if (updates.length > 0) {
-            await (supabase.from("role_menu_permissions") as any).upsert(updates, {
-              onConflict: "role_id,menu_id",
-            });
-          }
+        const foundParent = DEFAULT_MENU_TREE.find((m) =>
+          m.children?.some((c) => c.code === menu_code)
+        );
+        if (foundParent) {
+          allPerms[role_name][foundParent.code] = true;
         }
       }
-    } catch (dbErr) {
-      console.warn("Không thể lưu trực tiếp vào Supabase (chưa có bảng trên Supabase):", dbErr);
     }
+
+    // Lưu bền vững vào Supabase Database (Users fallback + System Settings) & File local
+    await saveAllPermissionsMap(allPerms);
 
     return NextResponse.json({
       success: true,

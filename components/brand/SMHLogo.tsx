@@ -118,7 +118,7 @@ export const SMHLogo: React.FC<SMHLogoProps> = ({
         </span>
       </div>
       <span className={`text-slate-500 dark:text-slate-400 font-bold tracking-wider uppercase mt-0.5 ${sub} transition-colors`}>
-        Student MindX Hub
+        School MindX Hub
       </span>
     </div>
   );

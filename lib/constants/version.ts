@@ -1,5 +1,5 @@
 /**
- * Quản lý phiên bản hệ thống tập trung cho Student MindX Hub (SMH)
+ * Quản lý phiên bản hệ thống tập trung cho School MindX Hub (SMH)
  * BẮT BUỘC: Mỗi khi đẩy chức năng mới lên Git (theo Quy tắc 23),
  * tăng số hiệu phiên bản đúng chuẩn (vx.x) và cập nhật tóm tắt các chức năng chính tại đây.
  */
@@ -20,30 +20,36 @@ export interface ReleaseVersion {
 
 // Phiên bản hiện tại mới nhất của hệ thống
 export const CURRENT_VERSION: ReleaseVersion = {
-  version: "v1.7",
-  releaseDate: "08/09/2026",
+  version: "v2.1",
+  releaseDate: "15/09/2026",
   title:
-    "Bảo Trì Bền Vững Đa Môi Trường, Đồng Bộ Bố Cục Thống Nhất & Hoàn Thiện OAuth Cho Giảng Viên",
+    "Màn Hình Quản Lý Học Viên Độc Lập, Tinh Gọn 7 Cột Dữ Liệu, Hỗ Trợ Toàn Diện Giảng Viên & Trợ Giảng (LEC/TA)",
   summary:
-    "Lưu trữ trạng thái bảo trì trên Supabase Database ngăn chặn triệt để truy cập trên môi trường Production, thống nhất thiết kế thẻ tiêu đề tinh gọn loại bỏ mọi văn bản giải thích thừa, và hoàn thiện luồng Google OAuth cho Giảng viên Full-time.",
+    "Bổ sung màn hình Quản lý học viên độc lập với mã học viên tự sinh chuẩn hóa và tinh gọn bảng dữ liệu 7 cột. Hỗ trợ nhận diện toàn diện cả Giảng viên chính (LEC) và Trợ giảng (TA) từ LMS, tối ưu hóa điều kiện thêm lớp khi có ít nhất một giáo viên phụ trách đã được phê duyệt trên hệ thống.",
   features: [
     {
-      title: "Chế Độ Bảo Trì Bền Vững Đa Môi Trường (Production Persistence)",
+      title: "Màn Hình Quản Lý Học Viên Độc Lập & Bảng 7 Cột Tinh Gọn",
       description:
-        "Lưu trữ trạng thái bảo trì trực tiếp trên Supabase Database với bộ đệm in-memory 3s, đảm bảo Middleware chặn 100% tài khoản non-admin trên serverless Production và tự động hết hạn khi đến hạn kết thúc.",
-      category: "Bảo Mật & Ổn Định",
+        "Tách biệt hoàn toàn Quản lý học viên thành màn hình độc lập có phân quyền riêng, tự động sinh mã học viên không trùng lặp, hỗ trợ đối chiếu học viên thời gian thực với LMS và tinh gọn bảng dữ liệu về 7 cột chuẩn rõ ràng.",
+      category: "Tính Năng Mới",
     },
     {
-      title: "Bố Cục Giao Diện Thống Nhất & Tinh Gọn (Zero Explanatory Text)",
+      title: "Nhận Diện Toàn Diện Giảng Viên Chính (LEC) & Trợ Giảng (TA)",
       description:
-        "Đồng bộ thẻ tiêu đề chuẩn (Unified Page Header Card) trên toàn bộ các màn hình, loại bỏ toàn bộ ghi chú và hướng dẫn rườm rà, giữ giao diện sạch sẽ và tập trung vào dữ liệu nghiệp vụ.",
+        "Quét đồng thời từ 3 nguồn dữ liệu LMS (class teachers, session teachers, session attendance) để nhận diện đầy đủ cả Giảng viên và Trợ giảng, cấp quyền xem và quản lý lớp phân công cho cả hai vai trò.",
+      category: "Tính Năng Mới",
+    },
+    {
+      title: "Tối Ưu Điều Kiện Thêm Lớp Học Theo Giáo Viên Đã Phê Duyệt",
+      description:
+        "Cho phép thêm lớp học vào hệ thống quản lý khi có ít nhất 1 trong số các giáo viên phụ trách (LEC hoặc TA) đã có tài khoản và được phê duyệt trên Supabase Database.",
       category: "Cải Tiến",
     },
     {
-      title: "Hoàn Thiện OAuth Google Drive Cho Giảng Viên Full-Time & Supabase Auth",
+      title: "Hiển Thị Thay Đổi Trực Tiếp Tại Từng Dòng Học Viên",
       description:
-        "Khắc phục sự cố phân quyền và điều hướng cho Teacher Full-time, hỗ trợ linh hoạt cả Google OAuth trực tiếp và Supabase Auth OAuth kèm cơ chế điều hướng động về đúng Dashboard theo vai trò.",
-      category: "Tính Năng Mới",
+        "Trong tab danh sách học viên của lớp học, các biến động từ LMS (Họ tên, Trạng thái, v.v.) được hiển thị trực tiếp tại từng học viên kèm nút cập nhật riêng lẻ, loại bỏ hoàn toàn các banner ẩn/hiện gây phân mảnh.",
+      category: "Cải Tiến",
     },
   ],
 };

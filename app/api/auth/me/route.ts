@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getRoleMenuPermissions } from "@/lib/services/permissions-service";
+import { verifySmhToken } from "@/lib/auth/jwt";
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -16,7 +17,7 @@ const supabase = createClient(supabaseUrl, supabaseServiceRoleKey, {
 export async function GET(request: NextRequest) {
   const smhToken = request.cookies.get("smh_token")?.value;
   const idToken = request.cookies.get("id_token")?.value;
-  const userIdCookie = request.cookies.get("user_id")?.value;
+  let userId = request.cookies.get("user_id")?.value || "";
   const userNameCookie = request.cookies.get("user_name")?.value;
   const userRoleCookie = request.cookies.get("user_role")?.value;
 
@@ -24,17 +25,26 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ authenticated: false }, { status: 401 });
   }
 
+  // Nếu thiếu user_id cookie, trích xuất từ smhToken
+  if (!userId && smhToken) {
+    const verified = await verifySmhToken(smhToken);
+    if (verified.valid && verified.payload?.userId) {
+      userId = verified.payload.userId;
+    }
+  }
+
   let name = userNameCookie ? decodeURIComponent(userNameCookie) : "Người dùng";
   let role = userRoleCookie ? decodeURIComponent(userRoleCookie) : "Admin";
   let email = "";
+  let lmsCode = "";
 
   // Luôn truy vấn trực tiếp Supabase Database để lấy tên và vai trò mới nhất theo thời gian thực (Real-time)
-  if (userIdCookie) {
+  if (userId) {
     try {
       const { data: dbUser } = await supabase
         .from("users")
         .select("id, full_name, lms_code, email, roles ( name )")
-        .eq("id", userIdCookie)
+        .eq("id", userId)
         .single();
 
       if (dbUser) {
@@ -42,6 +52,10 @@ export async function GET(request: NextRequest) {
           name = dbUser.full_name.trim();
         } else if (dbUser.lms_code) {
           name = dbUser.lms_code.trim();
+        }
+
+        if (dbUser.lms_code) {
+          lmsCode = dbUser.lms_code.trim();
         }
 
         if (dbUser.email) {
@@ -69,7 +83,8 @@ export async function GET(request: NextRequest) {
   const response = NextResponse.json({
     authenticated: true,
     user: {
-      id: userIdCookie || null,
+      id: userId || null,
+      lms_code: lmsCode,
       name,
       role,
       email,

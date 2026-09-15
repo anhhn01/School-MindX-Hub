@@ -99,7 +99,7 @@ export default function ChangelogPage() {
             NHẬT KÝ PHÁT HÀNH HỆ THỐNG
           </h1>
           <p className="text-slate-600 dark:text-slate-400 text-xs sm:text-sm md:text-base mt-2 max-w-xl mx-auto leading-relaxed">
-            Tổng hợp các tính năng nổi bật, nâng cấp trải nghiệm và cải tiến bảo mật vừa được cập nhật trên nền tảng Student MindX Hub.
+            Tổng hợp các tính năng nổi bật, nâng cấp trải nghiệm và cải tiến bảo mật vừa được cập nhật trên nền tảng School MindX Hub.
           </p>
         </div>
 
@@ -171,7 +171,7 @@ export default function ChangelogPage() {
 
       {/* Footer */}
       <footer className="w-full max-w-4xl mx-auto py-4 border-t border-slate-200 dark:border-white/5 text-center text-xs text-slate-500 dark:text-slate-500 relative z-10">
-        © {new Date().getFullYear()} Student MindX Hub (SMH). Phiên bản {CURRENT_VERSION.version} • Mọi quyền được bảo lưu.
+        © {new Date().getFullYear()} School MindX Hub (SMH). Phiên bản {CURRENT_VERSION.version} • Mọi quyền được bảo lưu.
       </footer>
     </div>
   );

@@ -1,0 +1,32 @@
+{
+  "Admin": {
+    "system_management": true,
+    "user_management": true,
+    "screen_permission_management": true,
+    "user_centre_management": true,
+    "class_management": true,
+    "student_management": true,
+    "data_inspection": true,
+    "trial_schedules": true
+  },
+  "Teacher Full-time": {
+    "system_management": true,
+    "user_management": true,
+    "screen_permission_management": true,
+    "user_centre_management": true,
+    "class_management": true,
+    "student_management": true,
+    "data_inspection": true,
+    "trial_schedules": true
+  },
+  "Teacher Part-time": {
+    "system_management": true,
+    "user_management": false,
+    "screen_permission_management": false,
+    "user_centre_management": false,
+    "class_management": true,
+    "student_management": false,
+    "data_inspection": false,
+    "trial_schedules": false
+  }
+}

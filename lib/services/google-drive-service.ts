@@ -78,3 +78,15 @@ export function hasGoogleDriveConnected(userId: string): boolean {
   const tokens = getGoogleDriveTokens(userId);
   return !!(tokens && tokens.access_token);
 }
+
+/**
+ * Xóa token Google Drive của người dùng khi hủy liên kết
+ */
+export function removeGoogleDriveTokens(userId: string): void {
+  const store = readTokensStore();
+  if (store[userId]) {
+    delete store[userId];
+    writeTokensStore(store);
+  }
+}
+

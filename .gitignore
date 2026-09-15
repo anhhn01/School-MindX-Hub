@@ -121,6 +121,7 @@ data/user_settings_store.json
 data/maintenance_status.json
 data/site_stats.json
 data/google_drive_tokens.json
+data/managed_classes_store.json
 .kiro/
 .agents/
 .mcp.json

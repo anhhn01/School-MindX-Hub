@@ -36,6 +36,8 @@ export const API_ROUTES = {
     USERS_SCREEN: "/admin/system-management/users",
     USER_CENTRES_SCREEN: "/admin/system-management/user_centres",
     TRIAL_SCHEDULES_SCREEN: "/admin/data-inspection/trial_schedules",
+    CLASSES_SCREEN: "/admin/system-management/classes",
+    STUDENTS_SCREEN: "/admin/system-management/students",
     DASHBOARD: "/admin/dashboard",
   },
   TEACHER_FULLTIME: {
@@ -44,6 +46,8 @@ export const API_ROUTES = {
     PERMISSIONS_SCREEN: "/teacher-fulltime/system-management/screen_permission",
     USER_CENTRES_SCREEN: "/teacher-fulltime/system-management/user_centres",
     TRIAL_SCHEDULES_SCREEN: "/teacher-fulltime/data-inspection/trial_schedules",
+    CLASSES_SCREEN: "/teacher-fulltime/system-management/classes",
+    STUDENTS_SCREEN: "/teacher-fulltime/system-management/students",
   },
   TEACHER_PARTTIME: {
     DASHBOARD: "/teacher-parttime/dashboard",
@@ -51,6 +55,8 @@ export const API_ROUTES = {
     PERMISSIONS_SCREEN: "/teacher-parttime/system-management/screen_permission",
     USER_CENTRES_SCREEN: "/teacher-parttime/system-management/user_centres",
     TRIAL_SCHEDULES_SCREEN: "/teacher-parttime/data-inspection/trial_schedules",
+    CLASSES_SCREEN: "/teacher-parttime/system-management/classes",
+    STUDENTS_SCREEN: "/teacher-parttime/system-management/students",
   },
   USER: {
     PROFILE: "/profile",
@@ -58,6 +64,8 @@ export const API_ROUTES = {
   },
   DASHBOARD_STATS: "/api/dashboard/stats",
   OFFICE_HOURS: "/api/office-hours",
+  CLASSES: "/api/classes",
+  STUDENTS: "/api/students",
 
   // Helper sinh route động theo vai trò: /[role]/[main_menu]/[menu]
   ROLE_ROUTES: {
@@ -66,5 +74,7 @@ export const API_ROUTES = {
     SCREEN_PERMISSION: (role: string) => `/${getRoleSlug(role)}/system-management/screen_permission`,
     USER_CENTRES: (role: string) => `/${getRoleSlug(role)}/system-management/user_centres`,
     TRIAL_SCHEDULES: (role: string) => `/${getRoleSlug(role)}/data-inspection/trial_schedules`,
+    CLASSES: (role: string) => `/${getRoleSlug(role)}/system-management/classes`,
+    STUDENTS: (role: string) => `/${getRoleSlug(role)}/system-management/students`,
   },
 } as const;

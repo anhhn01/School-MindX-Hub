@@ -580,6 +580,15 @@ export interface LmsClassSlot {
   }>;
 }
 
+export interface LmsClassStudent {
+  id: string;
+  fullName: string;
+  status: string;
+  activeInClass: boolean;
+  email?: string | null;
+  phoneNumber?: string | null;
+}
+
 export interface LmsClassItem {
   id: string;
   name: string; // Mã lớp
@@ -592,6 +601,12 @@ export interface LmsClassItem {
   numberOfSessions: number;
   completedSessions: number;
   progressPercent: number;
+  checkpoint1Session?: number | null;
+  checkpoint1Date?: string | null;
+  checkpoint2Session?: number | null;
+  checkpoint2Date?: string | null;
+  finalProjectSession?: number | null;
+  finalProjectDate?: string | null;
   centre: {
     id: string;
     name: string;
@@ -611,6 +626,7 @@ export interface LmsClassItem {
     finalProjectDate?: string | null;
   } | null;
   slots: LmsClassSlot[];
+  students?: LmsClassStudent[];
 }
 
 function formatVnTimeOnly(isoString?: string | null): string {
@@ -731,6 +747,26 @@ export async function fetchClassesFromLms({
                   code
                 }
               }
+              teacherAttendance {
+                teacher {
+                  id
+                  fullName
+                  code
+                }
+                status
+              }
+            }
+            students {
+              _id
+              activeInClass
+              completed
+              student {
+                id
+                fullName
+                status
+                email
+                phoneNumber
+              }
             }
           }
         }
@@ -755,7 +791,7 @@ export async function fetchClassesFromLms({
     const now = new Date();
 
     return rawList.map((c: any) => {
-      const slots: LmsClassSlot[] = (c.slots || [])
+      const slots: (LmsClassSlot & { teacherAttendance?: any[] })[] = (c.slots || [])
         .map((s: any) => ({
           index: s.index,
           date: s.date,
@@ -764,8 +800,9 @@ export async function fetchClassesFromLms({
           summary: s.summary || null,
           homework: s.homework || null,
           teachers: s.teachers || [],
+          teacherAttendance: s.teacherAttendance || [],
         }))
-        .sort((a: LmsClassSlot, b: LmsClassSlot) => a.index - b.index);
+        .sort((a: any, b: any) => a.index - b.index);
 
       const totalSessions = c.numberOfSessions || slots.length || 0;
 
@@ -797,71 +834,122 @@ export async function fetchClassesFromLms({
         }
       }
 
-      // 🎯 Tìm giảng viên chính (teacherName) theo giáo viên có SỐ BUỔI DẠY NHIỀU NHẤT
-      // Nếu có nhiều hơn 1 GV có cùng số buổi dạy lớn nhất thì liệt kê tất cả
-      const teacherSlotCount = new Map<string, { fullName: string; code?: string; count: number }>();
+      // 🎯 Tìm tất cả giáo viên phân công (LEC và TA) của lớp học
+      // Quy chuẩn: Giáo viên phân công là giáo viên có trong lớp học đó với danh nghĩa là LEC hoặc là TA
+      const teacherMap = new Map<string, { fullName: string; code?: string; roleTag: string; count: number }>();
 
+      const resolveRoleTag = (roleName?: string | null): string => {
+        const r = (roleName || "").toLowerCase();
+        if (r.includes("assisstant") || r.includes("assistant") || r.includes("trợ giảng") || r.includes("supporter") || r === "ta") {
+          return "TA";
+        }
+        if (r.includes("lecturer") || r.includes("teacher") || r.includes("giảng viên") || r === "lec") {
+          return "LEC";
+        }
+        if (r.includes("mentor")) return "Mentor";
+        if (r.includes("supply")) return "Supply";
+        return roleName ? roleName.trim() : "LEC";
+      };
+
+      // 1. Quét từ c.teachers (Giảng viên & Trợ giảng được phân công chính thức cho lớp)
+      if (Array.isArray(c.teachers)) {
+        for (const t of c.teachers) {
+          const fullName = t.teacher?.fullName?.trim();
+          const code = t.teacher?.code?.trim();
+          const id = t.teacher?.id || code || fullName;
+          if (!id || !fullName) continue;
+
+          const roleTag = resolveRoleTag(t.role?.name);
+          if (!teacherMap.has(id)) {
+            teacherMap.set(id, { fullName, code: code || undefined, roleTag, count: 0 });
+          }
+        }
+      }
+
+      // 2. Quét từ c.slots[].teachers (Giáo viên / Trợ giảng được phân công theo từng buổi học)
       for (const slot of slots) {
         for (const t of (slot as any).teachers || []) {
-          const tFullName = t.teacher?.fullName?.trim();
-          const tCode = t.teacher?.code?.trim();
-          const tId = t.teacher?.id || tCode || tFullName;
-          if (!tId || !tFullName) continue;
+          const fullName = t.teacher?.fullName?.trim();
+          const code = t.teacher?.code?.trim();
+          const id = t.teacher?.id || code || fullName;
+          if (!id || !fullName) continue;
 
-          // Bỏ qua trợ giảng / supporter nếu có
-          const rName = (t.role?.name || "").toLowerCase();
-          if (rName.includes("supporter") || rName.includes("assistant") || rName.includes("trợ giảng")) {
-            continue;
+          const roleTag = resolveRoleTag(t.role?.name);
+          if (!teacherMap.has(id)) {
+            teacherMap.set(id, { fullName, code: code || undefined, roleTag, count: 1 });
+          } else {
+            const exist = teacherMap.get(id)!;
+            exist.count += 1;
+            if (roleTag && (!exist.roleTag || exist.roleTag === "LEC")) {
+              exist.roleTag = roleTag;
+            }
           }
-
-          const current = teacherSlotCount.get(tId) || {
-            fullName: tFullName,
-            code: tCode || undefined,
-            count: 0,
-          };
-          current.count += 1;
-          teacherSlotCount.set(tId, current);
         }
       }
 
-      let maxCount = 0;
-      for (const item of teacherSlotCount.values()) {
-        if (item.count > maxCount) {
-          maxCount = item.count;
+      // 3. Quét từ c.slots[].teacherAttendance (Nếu c.teachers & slot.teachers chưa phân bổ trước trên LMS, lấy từ điểm danh thực tế)
+      for (const slot of slots) {
+        for (const ta of (slot as any).teacherAttendance || []) {
+          if (ta.status === "ATTENDED" && ta.teacher) {
+            const fullName = ta.teacher.fullName?.trim();
+            const code = ta.teacher.code?.trim();
+            const id = ta.teacher.id || code || fullName;
+            if (!id || !fullName) continue;
+
+            if (!teacherMap.has(id)) {
+              // Nếu lớp đã có Giảng viên chính (LEC), giáo viên điểm danh cùng là TA (Trợ giảng)
+              const hasLecturer = Array.from(teacherMap.values()).some((t) => t.roleTag === "LEC");
+              const defaultTag = hasLecturer ? "TA" : "LEC";
+              teacherMap.set(id, { fullName, code: code || undefined, roleTag: defaultTag, count: 1 });
+            } else {
+              teacherMap.get(id)!.count += 1;
+            }
+          }
         }
       }
+
+      // 4. Fallback: contactTeacher nếu chưa tìm thấy bất kỳ ai
+      if (teacherMap.size === 0 && c.contactTeacher?.fullName) {
+        const fn = c.contactTeacher.fullName.trim();
+        teacherMap.set(fn, { fullName: fn, code: undefined, roleTag: "LEC", count: 1 });
+      }
+
+      const teacherList = Array.from(teacherMap.values());
+      // Sắp xếp: LEC trước, TA sau, sau đó theo số buổi dạy giảm dần
+      teacherList.sort((a, b) => {
+        if (a.roleTag === "LEC" && b.roleTag !== "LEC") return -1;
+        if (a.roleTag !== "LEC" && b.roleTag === "LEC") return 1;
+        return b.count - a.count;
+      });
 
       let teacherName = "";
       let teacherCodes: string[] = [];
 
-      if (maxCount > 0) {
-        const topTeachers = Array.from(teacherSlotCount.values()).filter((item) => item.count === maxCount);
-        teacherName = topTeachers.map((t) => t.fullName).join(", ");
-        teacherCodes = topTeachers.map((t) => t.code || t.fullName).filter(Boolean);
+      if (teacherList.length > 0) {
+        teacherName = teacherList
+          .map((t) => (t.roleTag ? `${t.fullName} (${t.roleTag})` : t.fullName))
+          .join(", ");
+        teacherCodes = teacherList.map((t) => t.code || t.fullName).filter(Boolean) as string[];
       }
 
-      // Fallback nếu trong slots không có thông tin teacher (hoặc chưa phân bổ slot)
-      if (!teacherName) {
-        if (Array.isArray(c.teachers) && c.teachers.length > 0) {
-          const lecturer = c.teachers.find((t: any) => {
-            const rName = (t.role?.name || "").toLowerCase();
-            return rName.includes("lecturer") || rName.includes("teacher") || rName.includes("giảng viên");
-          });
-          const chosen = lecturer?.teacher || c.teachers[0]?.teacher;
-          if (chosen) {
-            teacherName = chosen.fullName || "";
-            if (chosen.code) teacherCodes.push(chosen.code);
-          }
-        }
-        if (!teacherName && c.contactTeacher?.fullName) {
-          teacherName = c.contactTeacher.fullName;
-        }
-      }
-
-      // Checkpoint 1 & 2
+      // Checkpoint 1 & 2 (Ưu tiên từ LMS courseProcess, fallback quét từ summary buổi học)
       const cpSessions = c.courseProcess?.checkpointSessions || [];
-      const cp1Num = cpSessions[0]?.session || null;
-      const cp2Num = cpSessions[1]?.session || null;
+      let cp1Num = cpSessions[0]?.session || null;
+      let cp2Num = cpSessions[1]?.session || null;
+
+      if (!cp1Num || !cp2Num) {
+        slots.forEach((s, idx) => {
+          const sNum = s.index !== undefined ? s.index + 1 : idx + 1;
+          const text = (s.summary || "").toLowerCase();
+          if (!cp1Num && (text.includes("checkpoint 1") || text.includes("checkpoint1") || text.includes("bài checkpoint 1"))) {
+            cp1Num = sNum;
+          }
+          if (!cp2Num && (text.includes("checkpoint 2") || text.includes("checkpoint2") || text.includes("bài checkpoint 2"))) {
+            cp2Num = sNum;
+          }
+        });
+      }
+
       const cp1Slot = cp1Num && slots[cp1Num - 1] ? slots[cp1Num - 1].date : null;
       const cp2Slot = cp2Num && slots[cp2Num - 1] ? slots[cp2Num - 1].date : null;
 
@@ -881,6 +969,12 @@ export async function fetchClassesFromLms({
         numberOfSessions: totalSessions,
         completedSessions: completed,
         progressPercent,
+        checkpoint1Session: cp1Num,
+        checkpoint1Date: cp1Slot,
+        checkpoint2Session: cp2Num,
+        checkpoint2Date: cp2Slot,
+        finalProjectSession: finalSessionNum,
+        finalProjectDate: finalSlot,
         centre: c.centre
           ? {
               id: c.centre.id,
@@ -904,6 +998,25 @@ export async function fetchClassesFromLms({
           finalProjectDate: finalSlot,
         },
         slots,
+        students: (c.students || [])
+          .filter((cs: any) => cs.activeInClass !== false && cs.student?.id && cs.student?.fullName)
+          .map((cs: any) => {
+            const classStudentStatus = cs.completed
+              ? "COMPLETED"
+              : cs.activeInClass !== false
+              ? "ACTIVE"
+              : "DROPPED";
+
+            return {
+              id: cs.student.id,
+              fullName: cs.student.fullName.trim(),
+              status: classStudentStatus,
+              activeInClass: cs.activeInClass !== false,
+              completed: cs.completed === true,
+              email: cs.student.email || null,
+              phoneNumber: cs.student.phoneNumber || null,
+            };
+          }),
       };
     });
   } catch (err) {

@@ -116,7 +116,7 @@ export default function MaintenancePage() {
         </h1>
         <p className="text-slate-300 text-sm sm:text-base leading-relaxed max-w-lg mb-8">
           {maintenance?.reason ||
-            "Student MindX Hub (SMH) đang được tối ưu hóa và nâng cấp định kỳ nhằm mang đến trải nghiệm tốt nhất cho Thầy/Cô."}
+            "School MindX Hub (SMH) đang được tối ưu hóa và nâng cấp định kỳ nhằm mang đến trải nghiệm tốt nhất cho Thầy/Cô."}
         </p>
 
         {/* Status Finished Notice */}
@@ -202,7 +202,7 @@ export default function MaintenancePage() {
 
       {/* Footer info */}
       <footer className="w-full max-w-5xl py-4 border-t border-white/5 text-center text-xs text-slate-500 relative z-10">
-        Student MindX Hub (SMH) • Hotline hỗ trợ kỹ thuật MindX LMS
+        School MindX Hub (SMH) • Hotline hỗ trợ kỹ thuật MindX LMS
       </footer>
     </div>
   );

@@ -26,6 +26,8 @@ import {
 } from "lucide-react";
 import { API_ROUTES, getRoleSlug } from "@/lib/constants/api-routes";
 import { getRolePoints } from "@/lib/constants/roles";
+import { Toast, ToastData } from "@/components/common/Toast";
+import { ConfirmModal } from "@/components/common/ConfirmModal";
 
 interface User {
   id: string;
@@ -60,6 +62,29 @@ export default function UserManagementScreen() {
     userId?: string;
     newRoleName?: string;
   } | null>(null);
+
+  // Toast & Custom Confirm Modal
+  const [toastMessage, setToastMessage] = useState<ToastData | null>(null);
+  const showToast = (text: string, type: ToastData["type"] = "success") => {
+    setToastMessage({ text, type });
+    setTimeout(() => setToastMessage(null), 3500);
+  };
+
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string | React.ReactNode;
+    onConfirm: () => void | Promise<void>;
+    type?: "danger" | "warning" | "info";
+    confirmText?: string;
+    cancelText?: string;
+    isLoading?: boolean;
+  }>({
+    isOpen: false,
+    title: "",
+    message: "",
+    onConfirm: () => {},
+  });
 
   // Form State for Add User Modal
   const [addForm, setAddForm] = useState({
@@ -187,18 +212,18 @@ export default function UserManagementScreen() {
   const handleSubmitCreateUser = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!addForm.lms_code.trim()) {
-      alert("Vui lòng nhập Mã LMS / Tên đăng nhập!");
+      showToast("Vui lòng nhập Mã LMS / Tên đăng nhập!", "error");
       return;
     }
     if (!addForm.is_firebase && !addForm.password.trim()) {
-      alert("Vui lòng nhập mật khẩu cho tài khoản do website tạo!");
+      showToast("Vui lòng nhập mật khẩu cho tài khoản do website tạo!", "error");
       return;
     }
 
     // Role point constraint check: Không được tạo role cao hơn hoặc bằng mình
     const targetPoints = getRolePoints(addForm.role);
     if (targetPoints <= currentUserRolePoints && currentUserRolePoints > 1) {
-      alert("Bạn không có thẩm quyền tạo tài khoản với vai trò này!");
+      showToast("Bạn không có thẩm quyền tạo tài khoản với vai trò này!", "error");
       return;
     }
 
@@ -218,6 +243,7 @@ export default function UserManagementScreen() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Không thể tạo tài khoản");
 
+      showToast(`Đã tạo thành công tài khoản "${addForm.full_name || addForm.lms_code}"!`);
       setShowAddModal(false);
       setPendingAdminTarget(null);
       setAddForm({
@@ -230,48 +256,64 @@ export default function UserManagementScreen() {
       setAddFeedback(null);
       fetchUsers();
     } catch (err: any) {
-      alert(err.message);
+      showToast(err.message || "Không thể tạo tài khoản", "error");
     } finally {
       setSubmittingAdd(false);
     }
   };
 
   // Xóa tài khoản
-  const handleDeleteUser = async (user: User) => {
+  const handleDeleteUser = (user: User) => {
     const targetPoints = getRolePoints(user.role);
     if (targetPoints <= currentUserRolePoints) {
-      alert("Bạn không thể xóa tài khoản của chính mình hoặc vai trò cao hơn/bằng mình!");
+      showToast("Bạn không thể xóa tài khoản của chính mình hoặc vai trò cao hơn/bằng mình!", "error");
       return;
     }
 
-    if (!confirm(`Bạn có chắc chắn muốn xóa vĩnh viễn tài khoản "${user.full_name || user.lms_code}" không?`)) {
-      return;
-    }
-
-    setUpdatingId(user.id);
-    try {
-      const res = await fetch(API_ROUTES.ADMIN.USER_DETAIL(user.id), {
-        method: "DELETE",
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Không thể xóa tài khoản");
-      fetchUsers();
-    } catch (err: any) {
-      alert(err.message);
-    } finally {
-      setUpdatingId(null);
-    }
+    setConfirmModal({
+      isOpen: true,
+      title: "Xác nhận xóa tài khoản",
+      message: (
+        <span>
+          Bạn có chắc chắn muốn xóa vĩnh viễn tài khoản{" "}
+          <strong className="text-slate-900 dark:text-white">
+            "{user.full_name || user.lms_code}"
+          </strong>{" "}
+          không? Hành động này không thể hoàn tác.
+        </span>
+      ),
+      type: "danger",
+      confirmText: "Xóa vĩnh viễn",
+      cancelText: "Hủy bỏ",
+      onConfirm: async () => {
+        setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+        setUpdatingId(user.id);
+        try {
+          const res = await fetch(API_ROUTES.ADMIN.USER_DETAIL(user.id), {
+            method: "DELETE",
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || "Không thể xóa tài khoản");
+          showToast(`Đã xóa vĩnh viễn tài khoản "${user.full_name || user.lms_code}" thành công!`);
+          fetchUsers();
+        } catch (err: any) {
+          showToast(err.message || "Không thể xóa tài khoản", "error");
+        } finally {
+          setUpdatingId(null);
+        }
+      },
+    });
   };
 
   // Đổi trạng thái tài khoản
   const handleUpdateStatus = async (user: User, newStatus: string) => {
     const targetPoints = getRolePoints(user.role);
     if (targetPoints <= currentUserRolePoints && user.id === currentUserId) {
-      alert("Bạn không thể tự thay đổi trạng thái của chính mình!");
+      showToast("Bạn không thể tự thay đổi trạng thái của chính mình!", "error");
       return;
     }
     if (targetPoints <= currentUserRolePoints && currentUserRolePoints > 1) {
-      alert("Bạn không có quyền đổi trạng thái của vai trò bằng hoặc cao hơn!");
+      showToast("Bạn không có quyền đổi trạng thái của vai trò bằng hoặc cao hơn!", "error");
       return;
     }
 
@@ -284,9 +326,10 @@ export default function UserManagementScreen() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Không thể đổi trạng thái");
+      showToast(`Đã cập nhật trạng thái của "${user.full_name || user.lms_code}" thành "${newStatus}"!`);
       fetchUsers();
     } catch (err: any) {
-      alert(err.message);
+      showToast(err.message || "Không thể đổi trạng thái", "error");
     } finally {
       setUpdatingId(null);
     }
@@ -298,11 +341,11 @@ export default function UserManagementScreen() {
     const newRolePoints = getRolePoints(newRole);
 
     if (targetPoints <= currentUserRolePoints && currentUserRolePoints > 1) {
-      alert("Bạn không thể đổi vai trò của người có cấp bậc bằng hoặc cao hơn!");
+      showToast("Bạn không thể đổi vai trò của người có cấp bậc bằng hoặc cao hơn!", "error");
       return;
     }
     if (newRolePoints <= currentUserRolePoints && currentUserRolePoints > 1) {
-      alert("Bạn không thể gán vai trò bằng hoặc cao hơn vai trò của bạn!");
+      showToast("Bạn không thể gán vai trò bằng hoặc cao hơn vai trò của bạn!", "error");
       return;
     }
 
@@ -324,49 +367,66 @@ export default function UserManagementScreen() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Không thể đổi vai trò");
+      showToast(`Đã chuyển vai trò của "${user.full_name || user.lms_code}" thành "${newRole}"!`);
       fetchUsers();
     } catch (err: any) {
-      alert(err.message);
+      showToast(err.message || "Không thể đổi vai trò", "error");
     } finally {
       setUpdatingId(null);
     }
   };
 
   // Hủy liên kết Google Drive cho tài khoản cấp dưới
-  const handleUnlinkGoogle = async (user: User) => {
+  const handleUnlinkGoogle = (user: User) => {
     const targetPoints = user.role_points || getRolePoints(user.role);
     if (user.id === currentUserId) {
-      alert("Để hủy liên kết Google Drive của chính mình, vui lòng vào trang Hồ sơ cá nhân!");
+      showToast("Để hủy liên kết Google Drive của chính mình, vui lòng vào trang Hồ sơ cá nhân!", "warning");
       return;
     }
     if (targetPoints <= currentUserRolePoints && currentUserRolePoints > 1) {
-      alert("Bạn không thể hủy liên kết của người có cấp bậc bằng hoặc cao hơn!");
-      return;
-    }
-    if (!confirm(`Bạn có chắc chắn muốn hủy liên kết Google Drive cho tài khoản "${user.full_name || user.lms_code}" không?`)) {
+      showToast("Bạn không thể hủy liên kết của người có cấp bậc bằng hoặc cao hơn!", "error");
       return;
     }
 
-    setUpdatingId(user.id);
-    try {
-      const res = await fetch("/api/auth/google/unlink", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ target_user_id: user.id }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Không thể hủy liên kết Google Drive");
+    setConfirmModal({
+      isOpen: true,
+      title: "Hủy liên kết Google Drive",
+      message: (
+        <span>
+          Bạn có chắc chắn muốn hủy liên kết Google Drive cho tài khoản{" "}
+          <strong className="text-slate-900 dark:text-white">
+            "{user.full_name || user.lms_code}"
+          </strong>{" "}
+          không? Giảng viên này sẽ phải liên kết lại tài khoản Google khi đăng nhập tiếp theo.
+        </span>
+      ),
+      type: "warning",
+      confirmText: "Hủy liên kết",
+      cancelText: "Giữ lại",
+      onConfirm: async () => {
+        setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+        setUpdatingId(user.id);
+        try {
+          const res = await fetch("/api/auth/google/unlink", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ target_user_id: user.id }),
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || "Không thể hủy liên kết Google Drive");
 
-      alert("Hủy liên kết Google Drive thành công!");
-      fetchUsers();
-      if (viewingUser?.id === user.id) {
-        setViewingUser((prev) => (prev ? { ...prev, email: null } : null));
-      }
-    } catch (err: any) {
-      alert(err.message);
-    } finally {
-      setUpdatingId(null);
-    }
+          showToast(`Đã hủy liên kết Google Drive cho "${user.full_name || user.lms_code}" thành công!`);
+          fetchUsers();
+          if (viewingUser?.id === user.id) {
+            setViewingUser((prev) => (prev ? { ...prev, email: null } : null));
+          }
+        } catch (err: any) {
+          showToast(err.message || "Không thể hủy liên kết Google Drive", "error");
+        } finally {
+          setUpdatingId(null);
+        }
+      },
+    });
   };
 
   // Lọc dữ liệu hiển thị
@@ -932,6 +992,22 @@ export default function UserManagementScreen() {
             </div>
           </div>
         )}
+
+        {/* Hệ Thống Thông Báo Toast */}
+        <Toast toast={toastMessage} onClose={() => setToastMessage(null)} />
+
+        {/* Modal Xác Nhận Hành Động Thay Thế Native Confirm */}
+        <ConfirmModal
+          isOpen={confirmModal.isOpen}
+          onClose={() => setConfirmModal((prev) => ({ ...prev, isOpen: false }))}
+          onConfirm={confirmModal.onConfirm}
+          title={confirmModal.title}
+          message={confirmModal.message}
+          type={confirmModal.type}
+          confirmText={confirmModal.confirmText}
+          cancelText={confirmModal.cancelText}
+          isLoading={confirmModal.isLoading}
+        />
       </div>
     </AppLayout>
   );

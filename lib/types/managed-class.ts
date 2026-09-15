@@ -30,6 +30,14 @@ export interface ManagedClass {
   finalProjectSession?: number | null;
   finalProjectDate?: string | null;
   slots: ManagedClassSlot[];
+  students?: Array<{
+    id: string;
+    fullName: string;
+    studentCode?: string;
+    status: string;
+    email?: string | null;
+    phoneNumber?: string | null;
+  }>;
   addedBy?: string;
   addedAt?: string;
   updatedAt?: string;
@@ -79,24 +87,38 @@ export function formatVnTime(timeStr?: string | null): string {
 
 /**
  * Tự động tính toán hạn nộp bài mặc định:
- * - Buổi 1 -> Checkpoint 2: [Giờ bắt đầu] - [Giờ kết thúc, Ngày học]
- * - Sản phẩm cuối khóa: [Sau thời điểm kết thúc Checkpoint 2] -> [Thời điểm kết thúc buổi cuối]
+ * - Buổi 1 -> Checkpoint 2: [Giờ bắt đầu] - [Giờ kết thúc, Ngày học] của từng buổi
+ * - Giai đoạn Sản phẩm cuối khóa (từ buổi ngay sau Checkpoint 2 đến buổi cuối):
+ *   Toàn bộ các buổi trong giai đoạn này đều có chung hạn nộp:
+ *   [Giờ bắt đầu, Ngày học của buổi sau CP2] - [Giờ kết thúc, Ngày học của buổi cuối]
  */
 export function calculateDefaultDeadlines(classItem: LmsClassItem): ManagedClassSlot[] {
   const slots = classItem.slots || [];
-  const cp2Num = classItem.courseProcess?.checkpoint2Session || null;
-  const cp1Num = classItem.courseProcess?.checkpoint1Session || null;
-  const totalSessions = classItem.numberOfSessions || slots.length;
+  const cp2Num = classItem.checkpoint2Session || classItem.courseProcess?.checkpoint2Session || null;
+  const cp1Num = classItem.checkpoint1Session || classItem.courseProcess?.checkpoint1Session || null;
+  const targetCpNum = cp2Num || cp1Num || null;
 
-  // Tìm slot của Checkpoint 2
-  let cp2Slot = cp2Num && slots[cp2Num - 1] ? slots[cp2Num - 1] : null;
-  if (!cp2Slot && cp1Num && slots[cp1Num - 1]) {
-    cp2Slot = slots[cp1Num - 1]; // Fallback CP1 nếu không có CP2
+  // Tính sẵn hạn nộp thống nhất cho toàn bộ giai đoạn SPCK (sau CP2 đến buổi cuối)
+  let spckSharedDeadline = "";
+  if (targetCpNum && targetCpNum < slots.length) {
+    const postCpSlot = slots[targetCpNum]; // Buổi ngay sau CP2 (0-indexed = targetCpNum)
+    const finalSlot = slots[slots.length - 1]; // Buổi cuối
+
+    const startStr = postCpSlot
+      ? `${formatVnTime(postCpSlot.startTime)}, ${formatVnDate(postCpSlot.date)}`
+      : "";
+    const endStr = finalSlot
+      ? `${formatVnTime(finalSlot.endTime)}, ${formatVnDate(finalSlot.date)}`
+      : "";
+
+    if (startStr && endStr) {
+      spckSharedDeadline = `${startStr} - ${endStr}`;
+    }
   }
 
   return slots.map((s, idx) => {
     const sessionNumber = s.index !== undefined ? s.index + 1 : idx + 1;
-    const isFinalSession = sessionNumber === totalSessions || idx === slots.length - 1;
+    const isSpckPhase = targetCpNum !== null && sessionNumber > targetCpNum;
 
     const dateStr = formatVnDate(s.date);
     const tStart = formatVnTime(s.startTime);
@@ -104,14 +126,11 @@ export function calculateDefaultDeadlines(classItem: LmsClassItem): ManagedClass
 
     let defaultDeadline = "";
 
-    if (isFinalSession && cp2Slot) {
-      // Sản phẩm cuối khóa: sau thời điểm kết thúc CP2 -> kết thúc buổi cuối
-      const cp2End = formatVnTime(cp2Slot.endTime) || "21:00";
-      const cp2DateStr = formatVnDate(cp2Slot.date);
-      const finalEnd = tEnd || "21:00";
-      defaultDeadline = `${cp2End}, ${cp2DateStr} - ${finalEnd}, ${dateStr}`;
+    if (isSpckPhase && spckSharedDeadline) {
+      // Giai đoạn SPCK: tất cả các buổi đều có chung hạn nộp từ buổi sau CP2 đến buổi cuối
+      defaultDeadline = spckSharedDeadline;
     } else {
-      // Các buổi thường và Checkpoint: Bắt đầu - Kết thúc của buổi học đó
+      // Các buổi từ buổi 1 đến Checkpoint 2: Hạn nộp trong buổi học đó
       if (tStart && tEnd) {
         defaultDeadline = `${tStart} - ${tEnd}, ${dateStr}`;
       } else if (dateStr) {

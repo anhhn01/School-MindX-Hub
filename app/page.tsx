@@ -44,7 +44,7 @@ export default async function Home() {
             </div>
 
             <h1 className="text-3xl sm:text-5xl md:text-6xl font-black tracking-tight text-slate-900 dark:text-white leading-tight">
-              Student MindX Hub
+              School MindX Hub
             </h1>
 
             <p className="text-slate-600 dark:text-slate-300 text-sm sm:text-base max-w-2xl mx-auto leading-relaxed">

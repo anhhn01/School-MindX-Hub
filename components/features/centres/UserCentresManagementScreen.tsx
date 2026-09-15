@@ -192,7 +192,7 @@ export default function UserCentresManagementScreen() {
         {/* Toast Alert */}
         {toastMessage && (
           <div
-            className={`fixed bottom-6 right-6 z-50 flex items-center gap-3 px-5 py-3.5 rounded-xl shadow-2xl backdrop-blur-md border transition-all duration-300 animate-in fade-in slide-in-from-bottom-4 ${
+            className={`fixed bottom-6 right-6 z-[99999] flex items-center gap-3 px-5 py-3.5 rounded-xl shadow-2xl backdrop-blur-md border transition-all duration-300 animate-in fade-in slide-in-from-bottom-4 ${
               toastMessage.type === "success"
                 ? "bg-emerald-950/90 text-emerald-200 border-emerald-500/30"
                 : "bg-rose-950/90 text-rose-200 border-rose-500/30"

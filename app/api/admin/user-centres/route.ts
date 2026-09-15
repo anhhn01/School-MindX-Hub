@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
     // 3. Format dữ liệu và gắn danh sách cơ sở trực thuộc
     const formattedList = await Promise.all(
       (users || [])
-        .filter((u: any) => u.lms_code !== "__system_maintenance__")
+        .filter((u: any) => !u.lms_code?.startsWith("__"))
         .map(async (u: any) => {
         const statusObj = Array.isArray(u.user_statuses) ? u.user_statuses[0] : u.user_statuses;
         const roleObj = Array.isArray(u.roles) ? u.roles[0] : u.roles;

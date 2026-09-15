@@ -53,8 +53,17 @@ function writeLocalFile(data: Record<string, ManagedClass>): void {
   }
 }
 
+import { deleteStudentsOfClass } from "./managed-students-service";
+
+const MANAGED_CLASSES_FALLBACK_USER_ID = "00000000-0000-0000-0000-000000000002";
+const MANAGED_CLASSES_FALLBACK_LMS_CODE = "__managed_classes__";
+
 /**
- * Đọc danh sách lớp quản lý từ Supabase (system_settings) kèm cache local
+ * Đọc danh sách lớp quản lý từ Supabase
+ * Ưu tiên 1: Bảng `managed_classes` trực tiếp trên Supabase
+ * Ưu tiên 2: Bảng `system_settings` (key = 'managed_classes')
+ * Ưu tiên 3: Bản ghi fallback bảng `users`
+ * Ưu tiên 4: File local `data/managed_classes_store.json`
  */
 export async function getAllManagedClassesMap(): Promise<Record<string, ManagedClass>> {
   const now = Date.now();
@@ -62,7 +71,51 @@ export async function getAllManagedClassesMap(): Promise<Record<string, ManagedC
     return memoryStore;
   }
 
-  // 1. Thử lấy từ Supabase system_settings
+  // 1. Thử đọc trực tiếp từ bảng managed_classes trên Supabase
+  try {
+    const { data: rows, error } = await supabase
+      .from("managed_classes")
+      .select("*");
+
+    if (!error && Array.isArray(rows)) {
+      const map: Record<string, ManagedClass> = {};
+      rows.forEach((r: any) => {
+        map[r.id] = {
+          id: r.id,
+          name: r.name,
+          status: r.status,
+          courseName: r.course_name,
+          centreId: r.centre_id,
+          centreName: r.centre_name,
+          teacherName: r.teacher_name,
+          teacherCodes: r.teacher_codes || [],
+          classTime: r.class_time,
+          startDate: r.start_date,
+          endDate: r.end_date,
+          numberOfSessions: r.number_of_sessions,
+          completedSessions: r.completed_sessions,
+          progressPercent: r.progress_percent,
+          checkpoint1Session: r.checkpoint1_session,
+          checkpoint1Date: r.checkpoint1_date,
+          checkpoint2Session: r.checkpoint2_session,
+          checkpoint2Date: r.checkpoint2_date,
+          finalProjectSession: r.final_project_session,
+          finalProjectDate: r.final_project_date,
+          slots: r.slots || [],
+          addedAt: r.added_at,
+          addedBy: r.added_by,
+        };
+      });
+      memoryStore = map;
+      lastFetchTime = now;
+      writeLocalFile(map);
+      return map;
+    }
+  } catch (err) {
+    // Bảng managed_classes chưa tạo
+  }
+
+  // 2. Thử lấy từ Supabase system_settings
   try {
     const { data, error } = await supabase
       .from("system_settings")
@@ -77,10 +130,10 @@ export async function getAllManagedClassesMap(): Promise<Record<string, ManagedC
       return memoryStore;
     }
   } catch (err) {
-    // Supabase query error, fallback to local file
+    // Supabase query error
   }
 
-  // 2. Fallback sang file local
+  // 3. Fallback sang file local
   const localData = readLocalFile();
   memoryStore = localData;
   lastFetchTime = now;
@@ -88,7 +141,7 @@ export async function getAllManagedClassesMap(): Promise<Record<string, ManagedC
 }
 
 /**
- * Lưu toàn bộ danh sách lớp vào Supabase & file local
+ * Lưu toàn bộ danh sách lớp vào Supabase (managed_classes + system_settings + users fallback) & file local
  */
 export async function saveAllManagedClassesMap(
   data: Record<string, ManagedClass>,
@@ -98,25 +151,60 @@ export async function saveAllManagedClassesMap(
   lastFetchTime = Date.now();
   writeLocalFile(data);
 
-  try {
-    const { error } = await supabase
-      .from("system_settings")
-      .upsert({
-        key: "managed_classes",
-        value: data,
-        updated_at: new Date().toISOString(),
-        updated_by: updatedBy,
-      });
+  let savedToSupabase = false;
 
-    if (error) {
-      console.warn("Lỗi lưu managed_classes lên Supabase:", error.message);
-      return false;
+  // 1. Lưu trực tiếp vào bảng managed_classes nếu bảng tồn tại
+  try {
+    const records = Object.values(data).map((c) => ({
+      id: c.id,
+      name: c.name,
+      status: c.status,
+      course_name: c.courseName || null,
+      centre_id: c.centreId,
+      centre_name: c.centreName,
+      teacher_name: c.teacherName || null,
+      teacher_codes: c.teacherCodes || [],
+      class_time: c.classTime || null,
+      start_date: c.startDate || null,
+      end_date: c.endDate || null,
+      number_of_sessions: c.numberOfSessions || 0,
+      completed_sessions: c.completedSessions || 0,
+      progress_percent: c.progressPercent || 0,
+      checkpoint1_session: c.checkpoint1Session || null,
+      checkpoint1_date: c.checkpoint1Date || null,
+      checkpoint2_session: c.checkpoint2Session || null,
+      checkpoint2_date: c.checkpoint2Date || null,
+      final_project_session: c.finalProjectSession || null,
+      final_project_date: c.finalProjectDate || null,
+      slots: c.slots || [],
+      added_at: c.addedAt || new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      added_by: c.addedBy || updatedBy,
+    }));
+
+    if (records.length > 0) {
+      await supabase.from("managed_classes").upsert(records, { onConflict: "id" });
     }
-    return true;
+  } catch (err) {}
+
+  // 2. Lưu đồng thời vào bảng system_settings nếu tồn tại
+  try {
+    await supabase
+      .from("system_settings")
+      .upsert(
+        {
+          key: "managed_classes",
+          value: data,
+          updated_at: new Date().toISOString(),
+          updated_by: updatedBy,
+        },
+        { onConflict: "key" }
+      );
   } catch (err) {
-    console.warn("Lỗi kết nối Supabase khi lưu managed_classes:", err);
-    return false;
+    // system_settings not available
   }
+
+  return savedToSupabase;
 }
 
 
@@ -196,6 +284,17 @@ export async function deleteManagedClass(
   }
 
   delete map[classId];
+
+  // Xóa trực tiếp khỏi bảng managed_classes nếu bảng tồn tại
+  try {
+    await supabase.from("managed_classes").delete().eq("id", classId);
+  } catch (err) {}
+
+  // Xóa toàn bộ học viên thuộc lớp bị gỡ
+  try {
+    await deleteStudentsOfClass(classId);
+  } catch (err) {}
+
   await saveAllManagedClassesMap(map, userId);
 
   return { success: true };
@@ -206,7 +305,8 @@ export async function deleteManagedClass(
  */
 export function compareClassWithLms(
   current: ManagedClass,
-  lms: LmsClassItem
+  lms: LmsClassItem | any,
+  existingStudentsCount?: number
 ): { hasChanges: boolean; diffs: ClassDiffItem[] } {
   const diffs: ClassDiffItem[] = [];
 
@@ -256,7 +356,19 @@ export function compareClassWithLms(
     });
   }
 
-  // 5. Ngày bắt đầu / kết thúc
+  // 5. Tiến độ học tập / Số buổi đã diễn ra
+  const oldCompleted = current.completedSessions || 0;
+  const newCompleted = lms.completedSessions || 0;
+  if (oldCompleted !== newCompleted) {
+    diffs.push({
+      field: "progressPercent",
+      label: "Tiến độ học tập",
+      oldValue: `${oldCompleted}/${current.numberOfSessions} buổi (${current.progressPercent || 0}%)`,
+      newValue: `${newCompleted}/${lms.numberOfSessions} buổi (${lms.progressPercent || 0}%)`,
+    });
+  }
+
+  // 6. Ngày bắt đầu / kết thúc
   const oldStart = formatVnDate(current.startDate);
   const newStart = formatVnDate(lms.startDate);
   if (oldStart !== newStart) {
@@ -277,6 +389,21 @@ export function compareClassWithLms(
       oldValue: oldEnd || "N/A",
       newValue: newEnd || "N/A",
     });
+  }
+
+  // 7. Học viên active trong lớp
+  if (existingStudentsCount !== undefined && Array.isArray(lms.students)) {
+    const lmsActiveCount = lms.students.filter(
+      (s: any) => s.activeInClass !== false
+    ).length;
+    if (existingStudentsCount !== lmsActiveCount) {
+      diffs.push({
+        field: "students",
+        label: "Danh sách học viên",
+        oldValue: `${existingStudentsCount} học viên`,
+        newValue: `${lmsActiveCount} học viên active trên LMS`,
+      });
+    }
   }
 
   return {

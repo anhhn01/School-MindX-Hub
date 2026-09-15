@@ -1,5 +1,5 @@
 /**
- * Quản lý phiên bản hệ thống tập trung cho Student MindX Hub (SMH)
+ * Quản lý phiên bản hệ thống tập trung cho School MindX Hub (SMH)
  * BẮT BUỘC: Mỗi khi đẩy chức năng mới lên Git (theo Quy tắc 23),
  * tăng số hiệu phiên bản đúng chuẩn (vx.x) và cập nhật tóm tắt các chức năng chính tại đây.
  */
@@ -20,30 +20,36 @@ export interface ReleaseVersion {
 
 // Phiên bản hiện tại mới nhất của hệ thống
 export const CURRENT_VERSION: ReleaseVersion = {
-  version: "v1.9",
-  releaseDate: "09/09/2026",
+  version: "v2.1",
+  releaseDate: "15/09/2026",
   title:
-    "Tìm Kiếm Lớp Học Thời Gian Thực, Tối Ưu Hóa Google OAuth & Trang Chính Sách Quyền Riêng Tư",
+    "Màn Hình Quản Lý Học Viên Độc Lập, Tinh Gọn 7 Cột Dữ Liệu, Hỗ Trợ Toàn Diện Giảng Viên & Trợ Giảng (LEC/TA)",
   summary:
-    "Tích hợp tìm kiếm lớp học theo thời gian thực với dropdown gợi ý thông minh, tối ưu hóa toàn diện luồng xác thực Google OAuth & Supabase, và bổ sung trang Chính sách quyền riêng tư (/privacy) đạt chuẩn xác minh Google Cloud.",
+    "Bổ sung màn hình Quản lý học viên độc lập với mã học viên tự sinh chuẩn hóa và tinh gọn bảng dữ liệu 7 cột. Hỗ trợ nhận diện toàn diện cả Giảng viên chính (LEC) và Trợ giảng (TA) từ LMS, tối ưu hóa điều kiện thêm lớp khi có ít nhất một giáo viên phụ trách đã được phê duyệt trên hệ thống.",
   features: [
     {
-      title: "Tìm Kiếm Lớp Học Thông Minh & Tùy Chỉnh Hạn Nộp Bài",
+      title: "Màn Hình Quản Lý Học Viên Độc Lập & Bảng 7 Cột Tinh Gọn",
       description:
-        "Tự động gợi ý danh sách lớp khi gõ tìm kiếm theo thời gian thực, lọc theo phân quyền vai trò và cơ sở trực thuộc, phân công giáo viên có số buổi dạy nhiều nhất, bảo lưu tùy chỉnh hạn nộp bài và lưu trữ độc quyền trên cơ sở dữ liệu hệ thống.",
+        "Tách biệt hoàn toàn Quản lý học viên thành màn hình độc lập có phân quyền riêng, tự động sinh mã học viên không trùng lặp, hỗ trợ đối chiếu học viên thời gian thực với LMS và tinh gọn bảng dữ liệu về 7 cột chuẩn rõ ràng.",
       category: "Tính Năng Mới",
     },
     {
-      title: "Trang Chính Sách Quyền Riêng Tư (/privacy)",
+      title: "Nhận Diện Toàn Diện Giảng Viên Chính (LEC) & Trợ Giảng (TA)",
       description:
-        "Xây dựng trang Chính sách quyền riêng tư đáp ứng đầy đủ tiêu chuẩn xác minh Google OAuth Consent Screen, công khai minh bạch phạm vi quyền hạn drive.file và cam kết tuân thủ chính sách Google Limited Use.",
+        "Quét đồng thời từ 3 nguồn dữ liệu LMS (class teachers, session teachers, session attendance) để nhận diện đầy đủ cả Giảng viên và Trợ giảng, cấp quyền xem và quản lý lớp phân công cho cả hai vai trò.",
       category: "Tính Năng Mới",
     },
     {
-      title: "Tối Ưu Hóa Xác Thực Google OAuth & Đa Kênh Liên Kết",
+      title: "Tối Ưu Điều Kiện Thêm Lớp Học Theo Giáo Viên Đã Phê Duyệt",
       description:
-        "Nâng cấp luồng xử lý phiên Supabase Auth khi chuyển hướng từ Google, bổ sung tùy chọn liên kết Google OAuth trực tiếp dự phòng và hiển thị thông báo lỗi trực quan.",
-      category: "Bảo Mật & Ổn Định",
+        "Cho phép thêm lớp học vào hệ thống quản lý khi có ít nhất 1 trong số các giáo viên phụ trách (LEC hoặc TA) đã có tài khoản và được phê duyệt trên Supabase Database.",
+      category: "Cải Tiến",
+    },
+    {
+      title: "Hiển Thị Thay Đổi Trực Tiếp Tại Từng Dòng Học Viên",
+      description:
+        "Trong tab danh sách học viên của lớp học, các biến động từ LMS (Họ tên, Trạng thái, v.v.) được hiển thị trực tiếp tại từng học viên kèm nút cập nhật riêng lẻ, loại bỏ hoàn toàn các banner ẩn/hiện gây phân mảnh.",
+      category: "Cải Tiến",
     },
   ],
 };

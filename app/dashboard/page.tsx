@@ -22,7 +22,7 @@ export default function DashboardPage() {
               <span>Cổng Thông Tin Học Thuật SMH</span>
             </div>
             <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight mb-2 whitespace-nowrap">
-              Chào Mừng Đến Với Student MindX Hub
+              Chào Mừng Đến Với School MindX Hub
             </h2>
             <p className="text-rose-100 text-xs sm:text-sm leading-relaxed">
               Không gian quản lý tập trung tài khoản, lịch trình học tập và giám sát các chương trình đào tạo.

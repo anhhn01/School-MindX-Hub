@@ -23,6 +23,7 @@ import {
   Link2Off,
 } from "lucide-react";
 import { API_ROUTES } from "@/lib/constants/api-routes";
+import { ConfirmModal } from "@/components/common/ConfirmModal";
 
 interface UserProfileData {
   id: string;
@@ -148,10 +149,10 @@ export default function ProfilePage() {
     }
   };
 
-  const handleUnlinkGoogle = async () => {
-    if (!confirm("Bạn có chắc chắn muốn hủy liên kết tài khoản Google không?")) {
-      return;
-    }
+  const [showUnlinkModal, setShowUnlinkModal] = useState(false);
+
+  const executeUnlinkGoogle = async () => {
+    setShowUnlinkModal(false);
     setSaveLoading(true);
     try {
       const res = await fetch("/api/auth/google/unlink", {
@@ -282,9 +283,23 @@ export default function ProfilePage() {
                     <span className="text-slate-400 flex items-center gap-2">
                       <Mail className="w-3.5 h-3.5 text-slate-500" /> Email
                     </span>
-                    <span className="text-slate-900 dark:text-white font-medium line-clamp-1">
-                      {profile.email || "—"}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-slate-900 dark:text-white font-medium line-clamp-1">
+                        {profile.email || "—"}
+                      </span>
+                      {profile.email && (
+                        <button
+                          type="button"
+                          onClick={() => setShowUnlinkModal(true)}
+                          disabled={saveLoading}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-medium text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/40 border border-amber-200 dark:border-amber-900/40 transition-colors disabled:opacity-40 cursor-pointer"
+                          title="Hủy liên kết tài khoản Google Drive"
+                        >
+                          <Link2Off className="w-3 h-3" />
+                          <span>Hủy</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   <div className="flex items-center justify-between">
@@ -410,7 +425,7 @@ export default function ProfilePage() {
                           {profile.email ? (
                             <button
                               type="button"
-                              onClick={handleUnlinkGoogle}
+                              onClick={() => setShowUnlinkModal(true)}
                               disabled={saveLoading}
                               className="inline-flex items-center gap-1 text-[11px] font-semibold text-rose-600 dark:text-rose-400 hover:text-rose-700 hover:underline cursor-pointer disabled:opacity-50"
                               title="Hủy liên kết tài khoản Google Drive"
@@ -576,6 +591,18 @@ export default function ProfilePage() {
             </div>
           </div>
         ) : null}
+
+        <ConfirmModal
+          isOpen={showUnlinkModal}
+          onClose={() => setShowUnlinkModal(false)}
+          onConfirm={executeUnlinkGoogle}
+          title="Hủy liên kết tài khoản Google"
+          message="Bạn có chắc chắn muốn hủy liên kết tài khoản Google không? Bạn sẽ cần phải liên kết lại Google Drive vào lần đăng nhập tiếp theo."
+          type="warning"
+          confirmText="Hủy liên kết"
+          cancelText="Giữ lại"
+          isLoading={saveLoading}
+        />
       </div>
     </AppLayout>
   );

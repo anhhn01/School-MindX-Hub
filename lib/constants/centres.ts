@@ -6,34 +6,13 @@ export interface CentreItem {
   isActive?: boolean;
 }
 
-// Danh mục các cơ sở đang hoạt động chính thống từ hệ thống MindX LMS (71 cơ sở)
+// Danh mục 56 cơ sở vật lý chính thức đang hoạt động trên toàn quốc của MindX
 export const OFFICIAL_LMS_CENTRES: CentreItem[] = [
   {
     "id": "644345a794300678908f794c",
     "name": "Bắc Ninh - 09 Lê Thái Tổ",
     "shortName": "299LTT",
     "code": "LTT",
-    "isActive": true
-  },
-  {
-    "id": "69ddecafe1b57bea8bc7faf0",
-    "name": "Bắc Ninh - Bắc Giang",
-    "shortName": "182NTMK",
-    "code": "NTMK",
-    "isActive": true
-  },
-  {
-    "id": "61b469554e262f08af8c1312",
-    "name": "Các tỉnh phía Bắc",
-    "shortName": "CTPB",
-    "code": "CTPB",
-    "isActive": true
-  },
-  {
-    "id": "61b46b604e262f08af8c1348",
-    "name": "Các tỉnh phía Trung và Nam",
-    "shortName": "CTPN",
-    "code": "CTPN",
     "isActive": true
   },
   {
@@ -69,13 +48,6 @@ export const OFFICIAL_LMS_CENTRES: CentreItem[] = [
     "name": "Hải Phòng - 268 Trần Nguyên Hãn",
     "shortName": "268TNH",
     "code": "TNH",
-    "isActive": true
-  },
-  {
-    "id": "69ddebe5a215d36bd480803b",
-    "name": "Hải Phòng - Hải Dương",
-    "shortName": "169BĐ",
-    "code": "BĐ",
     "isActive": true
   },
   {
@@ -337,66 +309,10 @@ export const OFFICIAL_LMS_CENTRES: CentreItem[] = [
     "isActive": true
   },
   {
-    "id": "69e87b53ed0c269ce7931382",
-    "name": "HO-Hotline",
-    "shortName": "HOH",
-    "code": "HOH",
-    "isActive": true
-  },
-  {
-    "id": "6a3a3fd36b8348b5348c7b76",
-    "name": "Hưng Yên - Thái Bình",
-    "shortName": "309LTK",
-    "code": "LTK",
-    "isActive": true
-  },
-  {
-    "id": "67c2996e8e2819d70a9bdcec",
-    "name": "K18-B2B",
-    "shortName": "K18-B2B",
-    "code": "KBB",
-    "isActive": true
-  },
-  {
-    "id": "6687c0e6fa1db2001d936094",
-    "name": "Lớp mầm non Cửa sổ vàng (Golden Window)",
-    "shortName": "MN-HCM-D34-01",
-    "code": "MNHCMD",
-    "isActive": true
-  },
-  {
-    "id": "5fa97e4d7d99b9046207a21e",
-    "name": "MindX - Online",
-    "shortName": "HCM-Online",
-    "code": "ONL",
-    "isActive": true
-  },
-  {
-    "id": "68f7567e00e152ef27681640",
-    "name": "Mindx - Online 3",
-    "shortName": "HCM-Online 3",
-    "code": "HCMOnline",
-    "isActive": true
-  },
-  {
-    "id": "6502a1701191a90764f7b220",
-    "name": "MindX Digital Art",
-    "shortName": "DArt",
-    "code": "DArt",
-    "isActive": true
-  },
-  {
     "id": "644345e694300678908f795d",
     "name": "Nghệ An - 67 Đại Lộ Lê Nin",
     "shortName": "67ĐLLN",
     "code": "ĐLLN",
-    "isActive": true
-  },
-  {
-    "id": "69ddec56e1b57bea8bc7fa01",
-    "name": "Ninh Bình -  Nam Định",
-    "shortName": "162VNG",
-    "code": "VNG",
     "isActive": true
   },
   {
@@ -411,13 +327,6 @@ export const OFFICIAL_LMS_CENTRES: CentreItem[] = [
     "name": "Quảng Ninh - 70 Nguyễn Văn Cừ",
     "shortName": "70NVC",
     "code": "NVC",
-    "isActive": true
-  },
-  {
-    "id": "6a3a3f866b8348b5348c79fc",
-    "name": "Tây Ninh - Long An",
-    "shortName": "45QL62",
-    "code": "QL",
     "isActive": true
   },
   {
@@ -460,20 +369,6 @@ export const OFFICIAL_LMS_CENTRES: CentreItem[] = [
     "name": "Thuận An - Bình Dương",
     "shortName": "40LT1",
     "code": "LT",
-    "isActive": true
-  },
-  {
-    "id": "6687c1121c9ad0001cf28068",
-    "name": "Trường mầm non Chào bạn nhỏ (Redbean)",
-    "shortName": "MN-HCM-NDT-01",
-    "code": "MNHCMNDT",
-    "isActive": true
-  },
-  {
-    "id": "68ef6940981108cf9a5baae3",
-    "name": "Trường Mầm non Kokoro Cityland",
-    "shortName": "MN-HCM-CTLGV",
-    "code": "MNHCMCTLGV",
     "isActive": true
   },
   {

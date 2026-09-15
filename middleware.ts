@@ -52,35 +52,6 @@ async function checkMaintenanceMode(): Promise<boolean> {
         return isEnabled;
       }
     }
-
-    // 2. Fallback: Lấy từ bảng users row __system_maintenance__
-    const fallbackRes = await fetch(
-      `${supabaseUrl}/rest/v1/users?lms_code=eq.__system_maintenance__&select=password_hash`,
-      {
-        headers: {
-          apikey: supabaseKey,
-          Authorization: `Bearer ${supabaseKey}`,
-        },
-        cache: "no-store",
-      }
-    );
-
-    if (fallbackRes.ok) {
-      const fData = await fallbackRes.json();
-      if (Array.isArray(fData) && fData.length > 0 && fData[0]?.password_hash) {
-        const val = JSON.parse(fData[0].password_hash);
-        if (val.isEnabled && val.expectedEndTime) {
-          const endTs = new Date(val.expectedEndTime).getTime();
-          if (!isNaN(endTs) && Date.now() >= endTs) {
-            middlewareMaintenanceCache = { isEnabled: false, expiresAt: now + 3000 };
-            return false;
-          }
-        }
-        const isEnabled = Boolean(val.isEnabled);
-        middlewareMaintenanceCache = { isEnabled, expiresAt: now + 3000 };
-        return isEnabled;
-      }
-    }
   } catch (_) {}
 
   return false;
@@ -286,6 +257,16 @@ export async function middleware(request: NextRequest) {
         userPerms["class_management"] === true ||
         (userPerms["class_management"] === undefined && userPerms["system_management"] === true);
       if (!canAccessClasses) {
+        return NextResponse.rewrite(new URL("/not-found", request.url));
+      }
+    }
+
+    // 2.6 Màn hình Quản lý học viên: /[role]/system-management/students
+    if (pathname.includes("/system-management/students")) {
+      const canAccessStudents =
+        isAdmin ||
+        userPerms["student_management"] === true;
+      if (!canAccessStudents) {
         return NextResponse.rewrite(new URL("/not-found", request.url));
       }
     }

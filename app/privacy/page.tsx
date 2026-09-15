@@ -74,7 +74,7 @@ export default function PrivacyPolicyPage() {
             Chính Sách Quyền Riêng Tư
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-2 max-w-xl mx-auto">
-            Quy định về bảo mật dữ liệu, cơ chế thu thập thông tin và chính sách tuân thủ khi liên kết dịch vụ Google trên nền tảng Student MindX Hub (SMH).
+            Quy định về bảo mật dữ liệu, cơ chế thu thập thông tin và chính sách tuân thủ khi liên kết dịch vụ Google trên nền tảng School MindX Hub (SMH).
           </p>
           <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1 font-mono">
             Cập nhật lần cuối: Ngày 09 tháng 09 năm 2026
@@ -92,7 +92,7 @@ export default function PrivacyPolicyPage() {
               <h2>Giới Thiệu Chung</h2>
             </div>
             <p>
-              Hệ thống <strong>Student MindX Hub (SMH)</strong> là nền tảng quản lý nội bộ dành riêng cho đội ngũ giảng viên, quản trị viên và nhân sự tại MindX Technology School. Chúng tôi cam kết bảo vệ tuyệt đối quyền riêng tư và thông tin cá nhân của người dùng khi sử dụng các dịch vụ của hệ thống.
+              Hệ thống <strong>School MindX Hub (SMH)</strong> là nền tảng quản lý nội bộ dành riêng cho đội ngũ giảng viên, quản trị viên và nhân sự tại MindX Technology School. Chúng tôi cam kết bảo vệ tuyệt đối quyền riêng tư và thông tin cá nhân của người dùng khi sử dụng các dịch vụ của hệ thống.
             </p>
           </section>
 
@@ -289,7 +289,7 @@ export default function PrivacyPolicyPage() {
             </p>
             <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 space-y-1 text-xs">
               <p className="font-bold text-slate-900 dark:text-white">
-                Ban Quản Trị Hệ Thống Student MindX Hub (SMH)
+                Ban Quản Trị Hệ Thống School MindX Hub (SMH)
               </p>
               <p className="text-slate-600 dark:text-slate-400">
                 Tổ chức: MindX Technology School
@@ -298,7 +298,7 @@ export default function PrivacyPolicyPage() {
                 Tác giả: Huỳnh Nhật Anh - TF Coding HCM4
               </p>
               <p className="text-slate-600 dark:text-slate-400">
-                Website: <span className="font-mono text-rose-600 dark:text-rose-400">Student MindX Hub</span>
+                Website: <span className="font-mono text-rose-600 dark:text-rose-400">School MindX Hub</span>
               </p>
             </div>
           </section>

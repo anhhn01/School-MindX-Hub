@@ -20,11 +20,19 @@ import {
   ArrowUpDown,
   Filter,
   GraduationCap,
+  Eye,
+  Pencil,
+  Trash2,
+  Calendar,
+  Clock,
+  IdCard,
 } from "lucide-react";
 import { ManagedStudent } from "@/lib/types/managed-student";
+import { formatVnDateTime } from "@/lib/types/managed-class";
 import { CentreItem } from "@/lib/constants/centres";
 import { API_ROUTES, getRoleSlug } from "@/lib/constants/api-routes";
 import { SearchableDropdown } from "@/components/common/SearchableDropdown";
+import { ConfirmModal } from "@/components/common/ConfirmModal";
 
 export default function StudentManagementScreen() {
   // State danh sách học viên quản lý (lưu trên Supabase)
@@ -56,6 +64,26 @@ export default function StudentManagementScreen() {
     setToastMessage({ text, type });
     setTimeout(() => setToastMessage(null), 4500);
   };
+
+  // State theo dõi thay đổi LMS của học viên (hiển thị badge cạnh tên)
+  const [studentChangesMap, setStudentChangesMap] = useState<Record<string, boolean>>({});
+
+  // State Xem chi tiết học viên
+  const [viewingStudent, setViewingStudent] = useState<ManagedStudent | null>(null);
+
+  // State Chỉnh sửa học viên
+  const [editingStudent, setEditingStudent] = useState<ManagedStudent | null>(null);
+  const [editForm, setEditForm] = useState<{
+    fullName: string;
+    status: string;
+    className: string;
+    submissionQuotaMb: number;
+  }>({ fullName: "", status: "ACTIVE", className: "", submissionQuotaMb: 50 });
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+
+  // State Xóa học viên
+  const [deletingStudent, setDeletingStudent] = useState<ManagedStudent | null>(null);
+  const [isDeletingStudent, setIsDeletingStudent] = useState(false);
 
   // Modal Đối Chiếu Học Viên Với LMS
   const [studentSyncModal, setStudentSyncModal] = useState<{
@@ -162,6 +190,12 @@ export default function StudentManagementScreen() {
 
       if (data.success) {
         showToast(data.message || `Đã cập nhật dữ liệu mới nhất từ LMS cho học viên "${studentSyncModal.student.fullName}"!`);
+        // Xóa cờ thay đổi của học viên này ngay lập tức
+        setStudentChangesMap((prev) => {
+          const next = { ...prev };
+          delete next[studentSyncModal.student.id];
+          return next;
+        });
         setStudentSyncModal(null);
         fetchManagedStudents();
       } else {
@@ -171,6 +205,83 @@ export default function StudentManagementScreen() {
       showToast("Lỗi kết nối khi cập nhật dữ liệu học viên", "error");
     } finally {
       setConfirmingStudentSync(false);
+    }
+  };
+
+  // 5. Thao tác Xem chi tiết học viên
+  const handleOpenView = (student: ManagedStudent) => {
+    setViewingStudent(student);
+  };
+
+  // 6. Thao tác Mở modal Chỉnh sửa học viên
+  const handleOpenEdit = (student: ManagedStudent) => {
+    setEditingStudent(student);
+    setEditForm({
+      fullName: student.fullName || "",
+      status: (student.status || "ACTIVE").toUpperCase(),
+      className: student.className || "",
+      submissionQuotaMb: student.submissionQuotaMb || 50,
+    });
+  };
+
+  // 7. Lưu thay đổi chỉnh sửa học viên vào Supabase
+  const handleSaveEdit = async () => {
+    if (!editingStudent) return;
+    if (!editForm.fullName.trim()) {
+      showToast("Vui lòng nhập họ và tên học viên", "error");
+      return;
+    }
+
+    setIsSavingEdit(true);
+    try {
+      const res = await fetch(`/api/students/${editingStudent.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fullName: editForm.fullName.trim(),
+          status: editForm.status,
+          className: editForm.className.trim(),
+          submissionQuotaMb: Number(editForm.submissionQuotaMb) || 50,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Không thể cập nhật thông tin học viên");
+      }
+
+      showToast(`Đã cập nhật thông tin học viên "${editForm.fullName}" thành công!`);
+      setEditingStudent(null);
+      fetchManagedStudents();
+    } catch (err: any) {
+      showToast(err.message || "Lỗi kết nối khi lưu thông tin học viên", "error");
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
+
+  // 8. Xác nhận Xóa học viên khỏi danh sách quản lý
+  const handleConfirmDelete = async () => {
+    if (!deletingStudent) return;
+    setIsDeletingStudent(true);
+
+    try {
+      const res = await fetch(`/api/students/${deletingStudent.id}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Không thể xóa học viên");
+      }
+
+      showToast(`Đã xóa học viên "${deletingStudent.fullName}" khỏi danh sách quản lý`);
+      setDeletingStudent(null);
+      fetchManagedStudents();
+    } catch (err: any) {
+      showToast(err.message || "Lỗi kết nối khi xóa học viên", "error");
+    } finally {
+      setIsDeletingStudent(false);
     }
   };
 
@@ -195,7 +306,10 @@ export default function StudentManagementScreen() {
           const matchEmail = (st.email || "").toLowerCase().includes(q);
           const matchPhone = (st.phoneNumber || "").toLowerCase().includes(q);
           const matchClass = (st.className || "").toLowerCase().includes(q);
-          if (!matchCode && !matchName && !matchEmail && !matchPhone && !matchClass) {
+          const matchTeacher =
+            (st.teacherName || "").toLowerCase().includes(q) ||
+            (st.lastTeacherName || "").toLowerCase().includes(q);
+          if (!matchCode && !matchName && !matchEmail && !matchPhone && !matchClass && !matchTeacher) {
             return false;
           }
         }
@@ -379,7 +493,7 @@ export default function StudentManagementScreen() {
               type="text"
               value={studentSearch}
               onChange={(e) => setStudentSearch(e.target.value)}
-              placeholder="Lọc tên, mã học viên, email, SĐT, lớp..."
+              placeholder="Tìm kiếm"
               className="w-full pl-10 pr-9 py-2 sm:py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-rose-500/30"
             />
             {studentSearch && (
@@ -405,8 +519,8 @@ export default function StudentManagementScreen() {
                 setStudentPageInput("1");
               }}
               options={centreOptions}
-              placeholder="Chọn cơ sở..."
-              searchPlaceholder="Tìm kiếm cơ sở..."
+              placeholder="Chọn cơ sở"
+              searchPlaceholder="Tìm kiếm cơ sở"
               icon={<Building2 className="w-3.5 h-3.5" />}
               className="w-full"
               align="left"
@@ -421,8 +535,8 @@ export default function StudentManagementScreen() {
                 setStudentPageInput("1");
               }}
               options={classOptions}
-              placeholder="Chọn lớp..."
-              searchPlaceholder="Tìm kiếm lớp học..."
+              placeholder="Chọn lớp"
+              searchPlaceholder="Tìm kiếm lớp học"
               icon={<BookOpen className="w-3.5 h-3.5" />}
               className="w-full"
               align="left"
@@ -437,8 +551,8 @@ export default function StudentManagementScreen() {
                 setStudentPageInput("1");
               }}
               options={statusOptions}
-              placeholder="Chọn trạng thái..."
-              searchPlaceholder="Tìm trạng thái..."
+              placeholder="Chọn trạng thái"
+              searchPlaceholder="Tìm kiếm trạng thái"
               icon={<Filter className="w-3.5 h-3.5" />}
               className="w-full"
               align="left"
@@ -453,8 +567,8 @@ export default function StudentManagementScreen() {
                 setStudentPageInput("1");
               }}
               options={sortOptions}
-              placeholder="Sắp xếp..."
-              searchPlaceholder="Tìm kiểu sắp xếp..."
+              placeholder="Sắp xếp theo"
+              searchPlaceholder="Tìm kiếm sắp xếp"
               icon={<ArrowUpDown className="w-3.5 h-3.5" />}
               className="w-full"
               align="right"
@@ -471,12 +585,12 @@ export default function StudentManagementScreen() {
                 <span className="inline-block w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
                 <span>Kéo / vuốt sang phải để xem đầy đủ cột Trạng thái & Thao tác</span>
               </span>
-              <span className="font-mono font-bold text-slate-600 dark:text-slate-300">7 cột dữ liệu</span>
+              <span className="font-mono font-bold text-slate-600 dark:text-slate-300">8 cột dữ liệu</span>
             </div>
           )}
 
           <div className="overflow-x-auto scrollbar-thin">
-            <table className="w-full min-w-[890px] text-left border-collapse text-xs">
+            <table className="w-full min-w-[980px] text-left border-collapse text-xs">
               <thead>
                 <tr className="border-b border-slate-100 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-900/50 text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                   <th className="py-3 px-2 text-center w-12 whitespace-nowrap">STT</th>
@@ -484,6 +598,7 @@ export default function StudentManagementScreen() {
                   <th className="py-3 px-4 whitespace-nowrap min-w-[180px]">Họ và Tên</th>
                   <th className="py-3 px-4 whitespace-nowrap min-w-[180px]">Lớp Đang Theo Học</th>
                   <th className="py-3 px-4 whitespace-nowrap min-w-[180px]">Cơ Sở Trực Thuộc</th>
+                  <th className="py-3 px-3 text-center whitespace-nowrap min-w-[110px]">Định Mức Nộp</th>
                   <th className="py-3 px-3 text-center whitespace-nowrap min-w-[110px]">Trạng Thái</th>
                   <th className="py-3 px-3 text-center whitespace-nowrap min-w-[110px]">Thao Tác</th>
                 </tr>
@@ -491,14 +606,14 @@ export default function StudentManagementScreen() {
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
                 {loading ? (
                   <tr>
-                    <td colSpan={7} className="py-16 text-center text-slate-400">
+                    <td colSpan={8} className="py-16 text-center text-slate-400">
                       <RefreshCw className="w-6 h-6 animate-spin mx-auto text-rose-500 mb-2" />
                       <span>Đang tải danh sách học viên...</span>
                     </td>
                   </tr>
                 ) : paginatedStudents.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="py-16 text-center text-slate-400">
+                    <td colSpan={8} className="py-16 text-center text-slate-400">
                       <SearchX className="w-8 h-8 mx-auto text-slate-300 dark:text-slate-700 mb-2" />
                       <p className="font-semibold text-slate-600 dark:text-slate-400">
                         {studentSearch || selectedStudentCentre !== "all" || selectedStudentClass !== "all"
@@ -525,16 +640,48 @@ export default function StudentManagementScreen() {
                         </span>
                       </td>
                       <td className="py-3 px-4 font-bold text-slate-800 dark:text-slate-100 whitespace-nowrap">
-                        {st.fullName}
+                        <div className="flex items-center gap-2">
+                          <span>{st.fullName}</span>
+                          {studentChangesMap[st.id] && (
+                            <span
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30 animate-pulse"
+                              title="Thông tin học viên có sự thay đổi từ LMS, vui lòng đối chiếu để cập nhật"
+                            >
+                              <AlertCircle className="w-2.5 h-2.5" />
+                              <span>LMS Đã Đổi</span>
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="py-3 px-4 whitespace-nowrap">
                         <div className="flex items-center gap-1.5 text-slate-700 dark:text-slate-300">
                           <GraduationCap className="w-3.5 h-3.5 text-rose-500 shrink-0" />
                           <span className="font-semibold">{st.className}</span>
                         </div>
+                        {(st.teacherName || st.lastTeacherName) && (
+                          <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5 flex items-center gap-1">
+                            <span className="font-medium text-slate-500 dark:text-slate-400">GV:</span>
+                            <span className="text-slate-600 dark:text-slate-300 font-semibold truncate max-w-[150px]">
+                              {st.teacherName || st.lastTeacherName}
+                            </span>
+                            {!st.teacherName && st.lastTeacherName && (
+                              <span
+                                className="text-[9px] px-1 py-0.2 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20"
+                                title="Giáo viên phụ trách gần nhất"
+                              >
+                                (Gần nhất)
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </td>
                       <td className="py-3 px-4 text-slate-600 dark:text-slate-400 whitespace-nowrap">
                         {st.centreName}
+                      </td>
+                      <td className="py-3 px-3 text-center whitespace-nowrap">
+                        <span className="font-mono font-bold text-[11px] px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 border border-indigo-200/60 dark:border-indigo-900/40">
+                          {st.submissionQuotaMb || 50} MB
+                        </span>
                       </td>
                       <td className="py-3 px-3 text-center whitespace-nowrap">
                         <span
@@ -554,17 +701,50 @@ export default function StudentManagementScreen() {
                           {st.status?.toUpperCase() === "ACTIVE" ? "Đang học" : st.status || "N/A"}
                         </span>
                       </td>
+                      {/* Thao tác đầy đủ: Xem, Sửa, Đối chiếu LMS, Xóa */}
                       <td className="py-3 px-3 text-center whitespace-nowrap">
-                        <button
-                          type="button"
-                          onClick={() => handleCheckStudentSyncLms(st)}
-                          disabled={syncingStudentId === st.id}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-slate-600 dark:text-slate-300 hover:text-rose-600 dark:hover:text-rose-400 bg-slate-100 hover:bg-rose-50 dark:bg-slate-800 dark:hover:bg-rose-950/30 transition-colors cursor-pointer text-xs font-medium disabled:opacity-50"
-                          title="Đối chiếu và kiểm tra thay đổi từ LMS"
-                        >
-                          <RefreshCw className={`w-3.5 h-3.5 ${syncingStudentId === st.id ? "animate-spin text-rose-500" : ""}`} />
-                          <span>Đối chiếu LMS</span>
-                        </button>
+                        <div className="inline-flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenView(st)}
+                            className="p-1.5 rounded-lg text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                            title="Xem chi tiết học viên"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEdit(st)}
+                            className="p-1.5 rounded-lg text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors cursor-pointer"
+                            title="Chỉnh sửa thông tin học viên"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleCheckStudentSyncLms(st)}
+                            disabled={syncingStudentId === st.id}
+                            className={`p-1.5 rounded-lg transition-colors cursor-pointer relative ${
+                              studentChangesMap[st.id]
+                                ? "text-amber-600 dark:text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30"
+                                : "text-slate-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30"
+                            }`}
+                            title="Đối chiếu và kiểm tra thay đổi từ LMS"
+                          >
+                            <RefreshCw className={`w-3.5 h-3.5 ${syncingStudentId === st.id ? "animate-spin text-rose-500" : ""}`} />
+                            {studentChangesMap[st.id] && (
+                              <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-amber-500 animate-ping" />
+                            )}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDeletingStudent(st)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors cursor-pointer"
+                            title="Xóa học viên khỏi danh sách quản lý"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -734,6 +914,264 @@ export default function StudentManagementScreen() {
               </div>
             </div>
           </div>
+        )}
+
+        {/* Modal Xem Chi Tiết Học Viên */}
+        {viewingStudent && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-sm">
+            <div className="bg-white dark:bg-[#0B0F17] rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl w-full max-w-lg p-5 sm:p-6 space-y-4 animate-in fade-in zoom-in-95 duration-200">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 rounded-2xl bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20">
+                    <Eye className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white">
+                      Chi Tiết Học Viên
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Mã định danh: <strong className="font-mono text-rose-600 dark:text-rose-400">{viewingStudent.studentCode}</strong>
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setViewingStudent(null)}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="space-y-3 text-xs">
+                <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800/80 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-500 dark:text-slate-400">Họ và Tên:</span>
+                    <span className="font-bold text-slate-900 dark:text-white text-sm">{viewingStudent.fullName}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-500 dark:text-slate-400">Lớp Đang Học:</span>
+                    <span className="font-semibold text-rose-600 dark:text-rose-400">{viewingStudent.className}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-500 dark:text-slate-400">Giáo Viên Phụ Trách:</span>
+                    <span className="font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1">
+                      {viewingStudent.teacherName || viewingStudent.lastTeacherName || "Chưa xác định"}
+                      {!viewingStudent.teacherName && viewingStudent.lastTeacherName && (
+                        <span className="text-[10px] font-normal text-amber-500">(Gần nhất)</span>
+                      )}
+                    </span>
+                  </div>
+                  {viewingStudent.lastClassName && viewingStudent.lastClassName !== viewingStudent.className && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-500 dark:text-slate-400">Lớp Trước Đó:</span>
+                      <span className="text-slate-600 dark:text-slate-400 font-medium">
+                        {viewingStudent.lastClassName}
+                        {viewingStudent.lastTeacherName && viewingStudent.lastTeacherName !== viewingStudent.teacherName && (
+                          <span className="text-[11px] text-slate-400 dark:text-slate-500 ml-1">
+                            ({viewingStudent.lastTeacherName})
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                  )}
+                  {viewingStudent.courseName && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-500 dark:text-slate-400">Khóa Học:</span>
+                      <span className="text-slate-700 dark:text-slate-300 font-medium">{viewingStudent.courseName}</span>
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-500 dark:text-slate-400">Cơ Sở Trực Thuộc:</span>
+                    <span className="text-slate-700 dark:text-slate-300 font-medium">{viewingStudent.centreName}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-500 dark:text-slate-400">Định Mức Nộp Bài:</span>
+                    <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400 text-xs">
+                      {viewingStudent.submissionQuotaMb || 50} MB
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-500 dark:text-slate-400">Trạng Thái:</span>
+                    <span
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${
+                        viewingStudent.status?.toUpperCase() === "ACTIVE"
+                          ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30"
+                          : "bg-slate-500/10 text-slate-600 dark:text-slate-400 border border-slate-500/30"
+                      }`}
+                    >
+                      {viewingStudent.status?.toUpperCase() === "ACTIVE" ? "Đang học" : viewingStudent.status || "N/A"}
+                    </span>
+                  </div>
+                  {viewingStudent.addedAt && (
+                    <div className="flex items-center justify-between pt-1 border-t border-slate-200/60 dark:border-slate-800">
+                      <span className="text-slate-400">Thời gian thêm:</span>
+                      <span className="text-slate-500 font-mono">
+                        {formatVnDateTime(viewingStudent.addedAt)}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const st = viewingStudent;
+                    setViewingStudent(null);
+                    handleOpenEdit(st);
+                  }}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold bg-blue-50 text-blue-600 hover:bg-blue-100 dark:bg-blue-950/40 dark:text-blue-400 transition-colors cursor-pointer"
+                >
+                  Chỉnh sửa
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewingStudent(null)}
+                  className="px-5 py-2 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors cursor-pointer"
+                >
+                  Đóng
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal Chỉnh Sửa Học Viên */}
+        {editingStudent && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-sm">
+            <div className="bg-white dark:bg-[#0B0F17] rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl w-full max-w-md p-5 sm:p-6 space-y-4 animate-in fade-in zoom-in-95 duration-200">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 rounded-2xl bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
+                    <Pencil className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white">
+                      Chỉnh Sửa Học Viên
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Mã học viên: <strong className="font-mono text-rose-600 dark:text-rose-400">{editingStudent.studentCode}</strong>
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setEditingStudent(null)}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="space-y-3.5 text-xs">
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Họ và Tên Học Viên <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={editForm.fullName}
+                    onChange={(e) => setEditForm({ ...editForm, fullName: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-semibold focus:outline-none focus:ring-2 focus:ring-rose-500/30"
+                    placeholder="Nhập họ và tên"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Lớp Đang Theo Học
+                  </label>
+                  <input
+                    type="text"
+                    value={editForm.className}
+                    onChange={(e) => setEditForm({ ...editForm, className: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-rose-500/30"
+                    placeholder="Nhập mã lớp"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
+                    <span>Định Mức Nộp Bài</span>
+                    <span className="text-[10px] text-slate-400 font-normal">Tối đa 100 MB</span>
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min={1}
+                      max={100}
+                      value={editForm.submissionQuotaMb}
+                      onChange={(e) => {
+                        const val = Math.max(1, Math.min(100, Number(e.target.value) || 1));
+                        setEditForm({ ...editForm, submissionQuotaMb: val });
+                      }}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-bold font-mono focus:outline-none focus:ring-2 focus:ring-rose-500/30"
+                    />
+                    <span className="font-bold text-xs text-slate-500">MB</span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Trạng Thái Hoạt Động
+                  </label>
+                  <select
+                    value={editForm.status}
+                    onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium focus:outline-none focus:ring-2 focus:ring-rose-500/30"
+                  >
+                    <option value="ACTIVE">Đang học (ACTIVE)</option>
+                    <option value="INACTIVE">Nghỉ học / Khác (INACTIVE)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setEditingStudent(null)}
+                  disabled={isSavingEdit}
+                  className="px-4 py-2.5 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors cursor-pointer"
+                >
+                  Hủy bỏ
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveEdit}
+                  disabled={isSavingEdit}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white transition-all shadow-md shadow-rose-600/20 cursor-pointer disabled:opacity-50"
+                >
+                  {isSavingEdit ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                  <span>{isSavingEdit ? "Đang lưu..." : "Lưu Thay Đổi"}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal Xác Nhận Xóa Học Viên */}
+        {deletingStudent && (
+          <ConfirmModal
+            isOpen={!!deletingStudent}
+            onClose={() => setDeletingStudent(null)}
+            onConfirm={handleConfirmDelete}
+            title="Xóa Học Viên Khỏi Quản Lý"
+            message={
+              <span>
+                Bạn có chắc chắn muốn xóa học viên{" "}
+                <strong className="text-slate-900 dark:text-white">
+                  "{deletingStudent.fullName}" ({deletingStudent.studentCode})
+                </strong>{" "}
+                khỏi hệ thống Supabase không? Thao tác này sẽ gỡ hoàn toàn học viên khỏi danh sách quản lý.
+              </span>
+            }
+            confirmText="Xác Nhận Xóa"
+            cancelText="Giữ Lại"
+            type="danger"
+            isLoading={isDeletingStudent}
+          />
         )}
       </div>
     </AppLayout>

@@ -7,7 +7,7 @@ import { Activity, Award, RefreshCw, CalendarCheck, Building2, Users, ArrowUpRig
 import { API_ROUTES } from "@/lib/constants/api-routes";
 
 export default function TeacherFullTimeDashboardPage() {
-  const [visits, setVisits] = useState<number>(346);
+  const [visits, setVisits] = useState<number>(0);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -15,7 +15,7 @@ export default function TeacherFullTimeDashboardPage() {
       .then((res) => res.json())
       .then((data) => {
         if (data.success && data.stats) {
-          setVisits(data.stats.total_visits_fulltime || 346);
+          setVisits(data.stats.account_visits || data.stats.total_visits_fulltime || 0);
         }
       })
       .catch(() => {})
@@ -56,7 +56,7 @@ export default function TeacherFullTimeDashboardPage() {
             </div>
             <div className="min-w-0 flex-1">
               <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 block whitespace-nowrap">
-                Tổng Lượt Truy Cập
+                Lượt Truy Cập Tài Khoản
               </span>
               <h3 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white mt-1 whitespace-nowrap">
                 {loading ? (

@@ -17,7 +17,8 @@
    - [5.3 Cập nhật trạng thái người dùng (Status Update)](#53-cập-nhật-trạng-thái-người-dùng-status-update)
    - [5.4 Cập nhật vai trò & Chính sách Single Admin (Role Update)](#54-cập-nhật-vai-trò--chính-sách-single-admin-role-update)
    - [5.5 Chỉnh sửa thông tin tài khoản (Edit User)](#55-chỉnh-sửa-thông-tin-tài-khoản-edit-user)
-6. [Quy Tắc Quản Trị Trạng Thái & Database Quan Trọng](#6-quy-tắc-quản-trị-trạng-thái--database-quan-trọng)
+6. [Luồng Quản Lý Học Viên & Tự Động Điều Chuyển Giáo Viên Phụ Trách](#6-luồng-quản-lý-học-viên--tự-động-điều-chuyển-giáo-viên-phụ-trách-student-teacher-dynamic-scoping--transfer-flow)
+7. [Quy Tắc Quản Trị Trạng Thái & Database Quan Trọng](#6-quy-tắc-quản-trị-trạng-thái--database-quan-trọng)
 
 ---
 
@@ -836,158 +837,7 @@ sequenceDiagram
 1. **Nguồn chân lý duy nhất (Single Source of Truth)**:
    - Toàn bộ thông tin phiên bản được định nghĩa tập trung tại `lib/constants/version.ts` qua hằng số `CURRENT_VERSION`.
    - Bao gồm: Số hiệu (`version`), Ngày phát hành (`releaseDate`), Tiêu đề (`title`), Tóm tắt ngắn gọn (`summary`), và danh sách các chức năng chính (`features`).
-2. **Trang Nhật Ký Phát Hành (`/changelog`)**:
-   - **Chỉ hiển thị DUY NHẤT 1 phiên bản mới nhất**, tuyệt đối không hiển thị danh sách lịch sử dài dòng.
-   - Các tính năng được phân loại rõ ràng bằng nhãn trực quan: *Tính Năng Mới*, *Cải Tiến*, *Bảo Mật & Ổn Định*.
-   - Nội dung tóm tắt hướng tới người dùng cuối, ngắn gọn, súc tích, dễ hiểu và không dùng ngôn từ kỹ thuật quá chuyên môn.
-3. **Chân trang (SystemFooter)**:
-   - Hiển thị trực tiếp số hiệu phiên bản mới nhất (ví dụ: `Phiên bản v1.5`) liên kết trực tiếp tới `/changelog`.
-   - Loại bỏ chữ `production` và loại bỏ huy hiệu trạng thái hệ thống trùng lặp.
-4. **Quy Tắc Bắt Buộc Khi Đẩy Code Lên Git**:
-   - Mỗi khi có tính năng/chức năng mới được chuẩn bị đẩy lên nhánh Git (`git push origin preview`), Agent **BẮT BUỘC** phải:
-     1. Tăng số hiệu phiên bản theo định dạng `vx.x` (ví dụ `v1.5` -> `v1.6`).
-     2. Cập nhật ngày phát hành và bổ sung tóm tắt tính năng mới vào `lib/constants/version.ts`.
-     3. Tiến hành kiểm tra `npm run build` trước khi `git add .` và `git push`.
-
----
-
-## 17. Luồng Điều Hướng Trang Chủ & Phân Biệt Sidebar Bảng Điều Khiển (Home & Dashboard Isolation Flow)
-
-### 17.1 Cơ Chế Ẩn/Hiện Menu Sidebar Giữa Trang Chủ Và Dashboard
-1. **Khi đang ở Trang chủ (`/`)**:
-   - Giao diện kế thừa `AppLayout` với Sidebar thu gọn và Header Dropdown đồng nhất.
-   - **Cách ly menu hoàn toàn**: Toàn bộ các nhóm menu nghiệp vụ của Dashboard (*QUẢN LÝ HỆ THỐNG*, *KIỂM TRA DỮ LIỆU*, v.v.) đều bị ẩn đi.
-   - Sidebar chỉ hiển thị **DUY NHẤT một nút "Về Bảng điều khiển"** (`/[role]/dashboard`).
-2. **Khi ở Dashboard hoặc các màn hình quản lý (`pathname !== "/"` )**:
-   - Sidebar hiển thị đầy đủ các nhóm menu nghiệp vụ theo phân quyền vai trò.
-   - Nhóm *TỔNG QUAN* có nút **"Xem trang chủ"** (`/`) để chuyển nhanh ra Trang chủ và nút **"Bảng điều khiển"** (`/[role]/dashboard`).
-
-### 17.2 Quy Chuẩn Vị Trí Badge Lượt Truy Cập & Nhận Diện Thương Hiệu Logo
-1. **Badge Nổi Lượt Truy Cập**:
-   - Neo cố định tại `fixed bottom-16 right-3 sm:bottom-20 sm:right-6 z-40`, đảm bảo bay lơ lửng an toàn phía trên Chân trang (Footer), tuyệt đối không che khuất thông tin bản quyền và phiên bản hệ thống.
-2. **Logo SMH**:
-   - Loại bỏ huy hiệu `Hub` gắn cạnh chữ `SMH` trong component `SMHLogo`, vì chữ `H` trong `SMH` vốn dĩ đã là `Hub`.
-3. **Thanh Cuộn Sleek Custom Scrollbar**:
-   - Không sử dụng thanh cuộn mặc định thô cứng của hệ điều hành.
-   - Áp dụng thanh cuộn tinh gọn (width 7px, bo tròn pill `rounded-full`, track trong suốt, thumb màu trung tính mờ nhẹ, hiệu ứng chuyển màu Crimson/Ruby khi rê chuột, hỗ trợ đầy đủ cả chế độ Sáng và Tối).
-
----
-
-## 18. Luồng Bắt Buộc Liên Kết Google Drive Cho Giảng Viên (Mandatory Google Drive OAuth Flow)
-
-### 18.1 Mục Đích & Điều Kiện Kích Hoạt
-1. **Đối tượng áp dụng**: Tài khoản có vai trò Giảng viên (`Teacher Part-time` hoặc `Teacher Full-time`).
-2. **Điều kiện kích hoạt**: Thuộc tính `email` trong bảng `users` tại cơ sở dữ liệu Supabase đang để trống (`NULL` hoặc rỗng `""`).
-3. **Hành vi cưỡng chế (Strict Enforcement)**:
-   - Khi tài khoản đăng nhập thành công qua `/api/auth/login`, hệ thống phát hiện email trống và trả về `requires_google_drive: true` kèm `redirect_url: "/connect-google-drive"`.
-   - Tại tầng **Middleware (`middleware.ts`)**: Mọi yêu cầu truy cập đến bất kỳ route nào (Dashboard, Trang chủ, Quản lý...) từ tài khoản này đều bị tự động chặn lại và chuyển hướng (Redirect 307) về màn hình `/connect-google-drive`.
-   - Các ngoại lệ duy nhất được phép đi qua: `/connect-google-drive`, `/api/auth/google/*`, `/api/auth/logout`, `/login`, tài nguyên tĩnh `/_next` và favicon.
-4. **Hỗ trợ 2 phương thức xác thực linh hoạt**:
-   - **Google OAuth 2.0 trực tiếp**: Sử dụng `GOOGLE_CLIENT_ID` và `GOOGLE_CLIENT_SECRET` trong file `.env`.
-   - **Supabase Auth OAuth**: Sử dụng `supabase.auth.signInWithOAuth({ provider: 'google' })` khi dự án đã cấu hình Google Provider trên Supabase Dashboard.
-
-### 18.2 Chi Tiết Luồng Tương Tác Google OAuth
-```mermaid
-sequenceDiagram
-    autonumber
-    actor Teacher as Giảng Viên (email: null)
-    participant LoginUI as /login
-    participant MW as Middleware
-    participant ConnectUI as /connect-google-drive
-    participant GoogleAuth as Google OAuth 2.0 / Supabase Auth
-    participant Callback as /api/auth/google/callback
-    participant DB as Supabase users
-    participant JSON as data/google_drive_tokens.json
-
-    Teacher->>LoginUI: Đăng nhập tài khoản giảng viên (email = null)
-    LoginUI->>ConnectUI: Điều hướng sang /connect-google-drive
-    Teacher->>ConnectUI: Nhấn "Liên kết với Google Drive" (trực tiếp hoặc qua Supabase)
-    ConnectUI->>GoogleAuth: Cấp quyền truy cập Google Drive & Email
-    GoogleAuth->>Callback: Redirect về /api/auth/google/callback?code=...
-    Callback->>GoogleAuth: Đổi code lấy tokens & email người dùng
-    Callback->>DB: UPDATE users SET email = googleEmail, updated_at = NOW()
-    Callback->>JSON: Lưu access_token & refresh_token theo userId
-    Callback->>Callback: Ký lại SMH JWT Token mới có chứa email
-    Callback-->>Teacher: Điều hướng động về /${roleSlug}/dashboard?connected=drive_success
-    Teacher->>MW: Truy cập Dashboard tương ứng vai trò
-    MW-->>Teacher: Cho phép truy cập bình thường (email đã tồn tại)
-```
-
-### 18.3 Cấu Hình Biến Môi Trường (DUY NHẤT trong `.env`)
-```env
-GOOGLE_CLIENT_ID=
-GOOGLE_CLIENT_SECRET=
-GOOGLE_REDIRECT_URI=http://localhost:3000/api/auth/google/callback
-```
-
-### 18.4 Tính Năng Hủy Liên Kết Google Drive (Unlink Google Account)
-1. **Tự Hủy Liên Kết Tại Hồ Sơ Cá Nhân (`/profile`)**:
-   - Người dùng nhấp nút **"Hủy liên kết"** cạnh ô Email.
-   - Gửi yêu cầu `POST /api/auth/google/unlink` (lấy user ID từ token của người gọi).
-   - Hệ thống xóa trường `email` về `NULL` trong bảng `users` và xóa token Google Drive trong `data/google_drive_tokens.json`.
-2. **Hủy Liên Kết Cho Tài Khoản Cấp Dưới Trong Quản Lý Tài Khoản (`/[role]/system-management/users`)**:
-   - Người dùng có vai trò cao hơn (`callerPoints < targetPoints`) có nút **Link2Off (Hủy liên kết)** trên từng dòng và trong modal chi tiết tài khoản cấp dưới.
-   - Gửi yêu cầu `POST /api/auth/google/unlink` với `{ target_user_id: user.id }`.
-   - Backend kiểm tra phân cấp cấp bậc nghiêm ngặt (`targetPoints > callerPoints`), từ chối nếu cố hủy của người bằng hoặc cao hơn mình.
-
----
-
-## 19. Luồng Chế Độ Bảo Trì Đa Môi Trường & Bố Cục Thống Nhất (Production Persistent Maintenance Flow & Unified Layout)
-
-### 19.1 Lưu Trữ Bền Vững Đa Môi Trường
-1. **Lưu trữ trên Supabase Database**:
-   - Bảng `system_settings` (hoặc fallback bản ghi hệ thống `__system_maintenance__` trong bảng `users`) lưu trữ trường `key: "maintenance"`, `enabled: boolean`, `expected_end_time: string`.
-   - Giải quyết triệt để vấn đề vô trạng thái (stateless) của môi trường serverless (Vercel Production), nơi hệ thống tệp cục bộ (`fs`) không được lưu giữ giữa các instance lambda.
-2. **Bộ đệm thông minh (Smart Caching)**:
-   - Caching in-memory với TTL 3 giây tại cả tầng `maintenance-service.ts` và tầng `middleware.ts`.
-   - Giảm thiểu số lượng request tới database nhưng đảm bảo phản ứng gần như tức thì khi Admin kích hoạt hoặc tắt bảo trì.
-3. **Cơ chế tự động hết hạn (Auto-expiry)**:
-   - Khi thời gian hiện tại vượt quá `expectedEndTime`, hệ thống tự động xác định trạng thái bảo trì đã kết thúc mà không cần thao tác tắt thủ công từ Admin.
-
-### 19.2 Cơ Chế Chặn Toàn Diện Tại Middleware
-```mermaid
-sequenceDiagram
-    autonumber
-    actor User as Người dùng (Non-Admin)
-    actor Admin as Quản trị viên (Admin)
-    participant MW as Middleware (Edge/Serverless)
-    participant DB as Supabase DB (REST API)
-    participant MPage as /maintenance
-    participant Login as /login?admin=1
-    participant Mgt as /admin/system-management/maintenance
-
-    Admin->>Mgt: Bật Chế độ Bảo trì (lưu vào Supabase DB)
-    User->>MW: Truy cập /, /login, hoặc bất kỳ route nghiệp vụ nào
-    MW->>DB: Kiểm tra trạng thái bảo trì (cache TTL 3s)
-    DB-->>MW: maintenance.enabled = true
-    MW-->>User: Chuyển hướng 307 về /maintenance
-    Admin->>MPage: Nhấn nút "Quản trị viên đăng nhập"
-    MPage->>Login: Chuyển sang /login?admin=1
-    MW-->>Admin: Cho phép truy cập /login khi có tham số ?admin=1
-    Admin->>Login: Đăng nhập tài khoản admin
-    MW-->>Admin: Cho phép Admin vào Dashboard và màn hình quản lý bảo trì
-```
-
-### 19.3 Quy Chuẩn Thống Nhất Giao Diện & Loại Bỏ Văn Bản Giải Thích
-1. **Thẻ Tiêu Đề Đồng Nhất (Unified Page Header Card)**:
-   - Áp dụng trên 100% màn hình chức năng: Quản lý người dùng, Phân quyền màn hình, Cơ sở trực thuộc, Quản lý lớp học, Lịch trải nghiệm, Bảo trì hệ thống, Hồ sơ cá nhân.
-   - Bố cục: Thẻ viền tinh tế bo góc lớn `rounded-3xl`, icon đại diện `w-12 h-12 rounded-2xl bg-rose-500/10 text-rose-600 border border-rose-500/20`, tiêu đề in hoa đậm `font-black tracking-wide`, phụ đề súc tích 1 dòng, và các nút tác vụ (Làm mới, Thêm mới) ở góc phải.
-2. **Triệt tiêu văn bản giải thích hướng dẫn (Zero Explanatory Text)**:
-   - Loại bỏ toàn bộ các khối chú thích dài dòng ("Tại sao cần...", "Lưu ý...", "👉 Vuốt ngang...") để giữ giao diện tối giản, tập trung vào thao tác nghiệp vụ.
-
----
-
-## 20. Quản Lý Lớp Học, Lịch Trình & Hạn Nộp Bài (Class Management, Schedule & Deadlines Flow)
-
-### 20.1 Định Tuyến & Ràng Buộc Cơ Sở Trực Thuộc
-- **Định tuyến chuẩn theo vai trò**: `/[role]/system-management/classes` (thuộc nhóm menu **QUẢN LÝ HỆ THỐNG**).
-- **Phân quyền truy cập**: Cho phép Admin và các vai trò có quyền `class_management: true` truy cập.
-- **Ràng buộc cơ sở trực thuộc (`user_centres`)**:
-  - Hệ thống chỉ truy vấn các lớp học thuộc các cơ sở mà tài khoản đang đăng nhập được phân quyền quản lý trong Supabase (`user_centres`).
-  - Hỗ trợ bộ lọc theo từng cơ sở cụ thể hoặc xem tất cả cơ sở trực thuộc.
-  - Hỗ trợ lọc theo trạng thái: `Tất cả`, `Đang học (RUNNING)`, `Sắp mở (OPEN)`, `Đã kết thúc (FINISHED)`.
-
-### 20.2 Luồng Tìm Kiếm Real-time, Dropdown Gợi Ý & Quản Lý Lớp Bền Vững (Supabase Only)
+2. *### 20.2 Luồng Tìm Kiếm Real-time, Dropdown Gợi Ý & Quản Lý Lớp Bền Vững (Supabase Only)
 - **Cơ chế Tìm kiếm Real-time Dropdown theo tên/mã lớp (`type=search`) & Chống Spam 429 (Debounce 1s)**:
   - Khi người dùng nhập từ 2 ký tự trở lên vào ô tìm kiếm mã lớp, hệ thống trì hoãn **1000ms (1 giây)** sau khi người dùng dừng gõ mới kích hoạt truy vấn mạng qua API `/api/classes?type=search&q=...` nhằm triệt tiêu hoàn toàn nguy cơ bị giới hạn tần suất (HTTP 429 Too Many Requests).
   - Trong lúc người dùng gõ, bộ lọc client-side lọc tức thì trên dữ liệu gợi ý đã tải giúp giao diện phản hồi mượt mà không có độ trễ.
@@ -1000,6 +850,86 @@ sequenceDiagram
   - Tuyệt đối **KHÔNG cho phép thêm các lớp ở trạng thái ngoài 3 trạng thái trên** (như `CLOSED`, `DRAFT`, `CANCELLED`, `PENDING`, v.v.). Nếu phát hiện trạng thái ngoài 3 trạng thái này, hệ thống sẽ chặn lại và báo lỗi: *"Hệ thống chỉ hỗ trợ các lớp OPEN, RUNNING hoặc FINISHED"*.
 - **Cơ chế Phát hiện Lớp Đã Tồn Tại Khi Thêm & Modal Đối Chiếu (`ExistingClassDiffModal`)**:
   - Khi người dùng bấm Thêm một lớp học, nếu lớp đó đã tồn tại trong cơ sở dữ liệu Supabase, hệ thống thực hiện so sánh đối chiếu dữ liệu hiện tại với LMS.
+  - Nếu có sự khác biệt dữ liệu, hệ thống tự động mở **Modal Đối Chiếu Lớp Đã Tồn Tại** hiển thị chi tiết từng trường khác biệt side-by-side và cung cấp 2 lựa chọn:
+    1. *"Chấp nhận cập nhật"*: Hệ thống ghi đè dữ liệu mới nhất từ LMS và tự động đồng bộ danh sách học viên active vào cơ sở dữ liệu.
+    2. *"Từ chối / Giữ nguyên"*: Hệ thống hủy thao tác và bảo lưu 100% dữ liệu lớp học hiện có trong Supabase.
+- **Phân quyền thêm lớp học theo vai trò**:
+  - **Admin & Teacher Full-time**: Có quyền tìm kiếm và thêm mọi lớp học thuộc các cơ sở trực thuộc được phân công.
+  - **Teacher Part-time**: Khối *"Tìm kiếm & Thêm lớp học"* được hiển thị đầy đủ, cho phép tìm kiếm và thêm **các lớp do chính mình phụ trách giảng dạy** vào hệ thống quản lý.
+- **Phân quyền dữ liệu & tìm kiếm theo vai trò (Role-based Scoping)**:
+  - **Admin & Teacher Full-time**: Nhìn thấy và tìm kiếm được **TẤT CẢ** các lớp học ở trạng thái opening, running và finished thuộc danh sách cơ sở trực thuộc được phân công (`user_centres`).
+  - **Teacher Part-time**: **CHỈ** xem và tìm kiếm được các lớp do chính giáo viên đó phụ trách (nếu tìm kiếm mã lớp người khác dạy sẽ thông báo không tìm thấy).
+- **Ràng buộc thêm lớp học (Giáo viên phụ trách phải có tài khoản Supabase, đã approved và đã liên kết Google Drive OAuth)**:
+  - Khi thêm lớp học, hệ thống quét danh sách tất cả giáo viên phụ trách của lớp (bao gồm Giảng viên chính LEC, Trợ giảng TA và Supply, đối chiếu qua mã LMS `teacherCodes` hoặc Họ tên `teacherName`).
+  - Hệ thống kiểm tra trong bảng `users` JOIN với `user_statuses` và kiểm tra liên kết Google Drive OAuth: **Bắt buộc có ít nhất 1 giáo viên phụ trách của lớp học đó đã có tài khoản trên hệ thống, tài khoản đang ở trạng thái đã được phê duyệt (`approved`) VÀ đã hoàn tất liên kết Google Drive qua OAuth**.
+  - Nếu không có giáo viên phụ trách nào thỏa mãn điều kiện trên, hệ thống chặn lại và thông báo: *"Giáo viên phụ trách chưa liên kết Google Drive hoặc chưa được phê duyệt"*.
+  - Nếu người thực hiện thêm lớp là Teacher Part-time thì tài khoản đó bắt buộc phải là một trong số các giáo viên phụ trách lớp học.
+- **Quy tắc suy luận và xác định vai trò Giáo viên LMS chuẩn xác (`LEC`, `TA`, `Supply`)**:
+  - Giáo viên phân công của một lớp học phản ánh chính xác vai trò thực tế:
+    1. Giảng viên phụ trách chính (số buổi tham gia giảng dạy nhiều nhất): Gán vai trò **`LEC`** (Lecturer).
+    2. Giảng viên dạy thay thế 1-2 buổi (dạy bù/thế): Gán vai trò **`Supply`**.
+    3. Trợ giảng: Gán vai trò **`TA`** (Teaching Assistant).
+  - Thứ tự ưu tiên sắp xếp danh sách giáo viên phụ trách: **`LEC`** $\rightarrow$ **`TA`** $\rightarrow$ **`Supply`** (ví dụ: `Huỳnh Nhật Anh (LEC), Nguyễn Quốc Thành (Supply)`).
+- **Kiến Trúc Lưu Trữ Bảng Riêng Biệt Trên Supabase (`managed_classes` & `managed_students`)**:
+  - Dữ liệu lớp học và học viên được lưu trữ trong 2 bảng chuyên biệt trên Supabase: `managed_classes` và `managed_students` (có khóa ngoại `managed_students.class_id REFERENCES managed_classes(id) ON DELETE CASCADE`).
+  - Toàn bộ dữ liệu lớp học và học viên hiển thị rõ ràng, chuẩn quan hệ từng dòng bản ghi độc lập với đầy đủ các cột thuộc tính trong Supabase Table Editor.
+  - Bảng `users` chỉ lưu trữ tài khoản người dùng thực tế (Admin, Teacher Full-time, Teacher Part-time), hoàn toàn sạch sẽ, không còn các bản ghi dummy.
+  - Hệ thống chỉ thực hiện các câu lệnh đọc dữ liệu từ LMS (Read-only GraphQL Queries), **tuyệt đối không thực hiện bất kỳ mutation hay thao tác ghi nào làm thay đổi dữ liệu trên LMS**.
+
+### 20.3 Bảng Danh Sách Lớp Đang Quản Lý, Bộ Lọc, Sắp Xếp & Phân Trang (20 Lớp / Trang)
+1. **Bộ lọc & Sắp xếp đa tiêu chí với Ô Nhập Tìm Kiếm Tích Hợp (`SearchableDropdown`)**:
+   - **Lọc từ khóa**: Tìm kiếm tức thì theo mã lớp, khóa học, giáo viên phụ trách, tên cơ sở (hỗ trợ nút xóa nhanh `X`).
+   - **Tất cả các bộ lọc dạng dropdown đều tích hợp Ô Nhập Tìm Kiếm bên trong (`SearchableDropdown`)**:
+     * **Lọc theo cơ sở**: Dropdown cơ sở trực thuộc có ô tìm kiếm gõ lọc nhanh theo tên/mã cơ sở.
+     * **Lọc theo giáo viên phụ trách**: Dropdown giáo viên phụ trách chỉ hiển thị các giáo viên đã approved và đã liên kết Google Drive OAuth thành công.
+     * **Lọc theo trạng thái**: Dropdown trạng thái (`Tất cả`, `Đang học`, `Sắp mở`, `Đã kết thúc`) có ô tìm kiếm nhanh.
+     * **Sắp xếp linh hoạt (`sortBy`)**: Dropdown sắp xếp có ô tìm kiếm hỗ trợ chuyển đổi tiêu chí thuận tiện.
+   - **Thông Báo Hệ Thống (Toast Alert) Luôn Hiển Thị Trên Cùng (`z-[99999]`)**:
+     * Hộp thoại thông báo (Toast feedback) được thiết lập `z-[99999]`, đảm bảo khi mở bất kỳ Modal nào, thông báo luôn hiển thị sắc nét ở lớp trên cùng.
+
+2. **Quy chuẩn Phân trang (20 lớp / Trang) & Nhảy trang linh hoạt**:
+   - Bảng hiển thị cố định **20 lớp trên mỗi trang** (`ITEMS_PER_PAGE = 20`).
+   - Tự động đánh số thứ tự (STT) liên tục theo từng trang: `(currentPage - 1) * 20 + idx + 1`.
+   - **Thanh phân trang phía dưới bảng**:
+     * Thông tin tiến trình: *"Hiển thị X - Y trong tổng số Z lớp học"*.
+     * Nút chuyển: Trang đầu (`|<<`), Trang trước (`<`), Trang sau (`>`), Trang cuối (`>>|`).
+     * **Ô nhập số trang trực tiếp (Jump to page input)**: Cho phép người dùng gõ số trang mong muốn và nhấn Enter hoặc rời chuột (onBlur) để nhảy ngay đến trang đó.
+     * Tự động đặt lại về trang 1 khi thay đổi từ khóa, cơ sở, giáo viên, trạng thái hoặc tiêu chí sắp xếp.
+
+3. **Cấu trúc 10 cột chuẩn**:
+| STT | Mã Lớp & Khóa Học | Cơ Sở | Giáo Viên Phụ Trách | Giờ Học | Ngày Bắt Đầu | Ngày Kết Thúc | Tiến Độ | Trạng Thái | Thao Tác |
+| :---: | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| 1 | `LBB-ROB-ARMA12` | HCM - 414 Lũy Bán Bích | Võ Minh Huân | `18:00 - 20:00` | 08/09/2026 | 08/12/2026 | 1/14 buổi (7%) | Đang học | Xem chi tiết, Sửa, Tải LMS, Học viên, Xóa |
+
+### 20.4 Modal Chi Tiết Lớp Học, Cấu Hình Hạn Nộp Bài (1 Ô Duy Nhất & Nút Lịch) & Nộp Trễ (Dropdown Select)
+1. **Thông tin tổng quan (Chống rớt chữ & Bố cục tinh gọn)**: Thẻ ngang gồm Trạng thái, Giáo viên phụ trách, Giờ học, Tổng số buổi, và Thời gian học áp dụng `whitespace-nowrap`.
+2. **Cụm Tab Chuyển Đổi Tinh Gọn**:
+   - **Tab 1: 📅 Lịch trình, Hạn nộp bài & Nộp trễ (N buổi)**: Quản lý lịch trình các buổi học, hạn nộp bài và cấu hình nộp trễ.
+   - **Tab 2: 👥 Danh sách học viên (M học viên)**: Hiển thị danh sách học viên active (đang học) có trong lớp học đó, kèm theo **Mã học viên** được tự động sinh theo quy chuẩn.
+3. **Bảng Lịch Trình Chi Tiết Các Buổi Học (Tab 1)**:
+   - `Buổi`: Số thứ tự buổi học (1 đến N), căn giữa `whitespace-nowrap`.
+   - `Ngày học`: Ngày diễn ra buổi học, định dạng chuẩn Việt Nam `DD/MM/YYYY` (xử lý chuỗi trực tiếp chống lệch múi giờ).
+   - `Giờ học`: Khung giờ của buổi học đó (`18:00 - 20:00`), `whitespace-nowrap`.
+   - `Ghi chú mốc`: Huy hiệu Checkpoint 1, Checkpoint 2, và **SP Cuối Khóa (hiển thị liên tục trên toàn bộ các buổi từ sau buổi Checkpoint 2 đến buổi cuối cùng)**.
+   - `Hạn nộp bài chính thức (1 ô duy nhất kèm nút lịch)`: Hiển thị **1 ô duy nhất** chứa mốc thời gian chuẩn Ngày Tháng Năm Giờ Phút (`DD/MM/YYYY HH:mm`) kèm nút icon lịch `<Calendar />` để mở native picker, loại bỏ hoàn toàn hiển thị badge trùng lặp.
+   - `Cho phép nộp trễ (Dropdown Select 3 tùy chọn)`: Sử dụng **1 Dropdown Select** tinh gọn thay thế hoàn toàn checkbox & radio button cũ:
+     * **Tùy chọn 1 (Không cho phép - Tắt nộp trễ)**: Ẩn toàn bộ ô nhập thời gian phụ.
+     * **Tùy chọn 2 (Theo ngày giờ cụ thể)**: Hiển thị ô `datetime-local` với ràng buộc kỹ thuật **không được vượt quá ngày kết thúc lớp học (`class.endDate`)**.
+     * **Tùy chọn 3 (Theo khoảng thời gian)**: Hiển thị 4 ô nhập số: **Ngày, Giờ, Phút, Giây** (ví dụ: `+2 ngày 12 giờ 0 phút 0 giây`).
+
+### 20.5 Kiểm Tra & Tự Động Đồng Bộ Ngầm Thời Gian Thực Từ LMS (Real-time LMS Auto-Sync)
+- **Tự động đồng bộ ngầm các trường vận hành**:
+  - Khi hệ thống kiểm tra đối chiếu LMS (`check_lms_changes`), các trường vận hành gồm: **Trạng thái lớp (`status`)**, **Số buổi học (`numberOfSessions`)**, **Số buổi hoàn thành (`completedSessions`)**, và **Tiến độ học tập (`progressPercent`)** tự động cập nhật ngầm vào Supabase DB theo thời gian thực và cập nhật state client ngay lập tức mà không làm gián đoạn người dùng.
+- **Quy tắc không tự động cập nhật lịch học buổi (Bắt buộc thông báo xác nhận)**:
+  - Nếu có sự thay đổi về lịch học (ngày bắt đầu, kết thúc, lịch các buổi học `slots`), hệ thống **tuyệt đối không tự động cập nhật ngầm** mà sẽ đưa vào danh sách diffs để hiển thị cảnh báo, yêu cầu người dùng chủ động kiểm tra và xác nhận cập nhật.
+- **Cảnh báo thay đổi LMS tại cột Mã Lớp**:
+  - Đối với các trường nội dung khác có biến động (Giáo viên, Khung giờ, Lịch học, Học viên), hệ thống hiển thị **Badge Cảnh Báo Nhấp Nháy tại cột Mã Lớp (`LMS Đã Đổi`)**.
+- **Bảo toàn hạn nộp bài tùy chỉnh**: Toàn bộ hạn nộp bài và cấu hình nộp trễ của từng slot buổi học mà người dùng đã cấu hình trước đó đều được bảo toàn nguyên vẹn khi đồng bộ từ LMS.
+
+### 20.6 Danh Mục 56 Cơ Sở MindX Chính Thống (56 Official Campuses)
+- Rà soát toàn bộ danh mục cơ sở MindX qua GraphQL query LMS.
+- Loại bỏ 32 cơ sở ngưng hoạt động (`isActive === false`) và 15 nhóm/hotline/phòng ban/online/đối tác mầm non.
+- Chuẩn hóa danh mục đúng **56 cơ sở vật lý chính thống** trên toàn quốc trong hằng số `OFFICIAL_LMS_CENTRES` và các bộ lọc toàn hệ thống. Admin sở hữu toàn bộ 56 cơ sở này.��i dùng bấm Thêm một lớp học, nếu lớp đó đã tồn tại trong cơ sở dữ liệu Supabase, hệ thống thực hiện so sánh đối chiếu dữ liệu hiện tại với LMS.
   - Nếu có sự khác biệt dữ liệu, hệ thống tự động mở **Modal Đối Chiếu Lớp Đã Tồn Tại** hiển thị chi tiết từng trường khác biệt side-by-side và cung cấp 2 lựa chọn:
     1. *"Chấp nhận cập nhật"*: Hệ thống ghi đè dữ liệu mới nhất từ LMS và tự động đồng bộ danh sách học viên active vào cơ sở dữ liệu.
     2. *"Từ chối / Giữ nguyên"*: Hệ thống hủy thao tác và bảo lưu 100% dữ liệu lớp học hiện có trong Supabase.
@@ -1048,48 +978,45 @@ sequenceDiagram
 3. **Cấu trúc 10 cột chuẩn**:
 | STT | Mã Lớp & Khóa Học | Cơ Sở | Giáo Viên Phụ Trách | Giờ Học | Ngày Bắt Đầu | Ngày Kết Thúc | Tiến Độ | Trạng Thái | Thao Tác |
 | :---: | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| 1 | `LBB-ROB-ARMA12` | HCM - 414 Lũy Bán Bích | Võ Minh Huân | `18:00 - 20:00` | 08/09/2026 | 08/12/2026 | 1/14 buổi (7%) | Đang học | Xem chi tiết, Tải LMS, Xóa |
+| 1 | `LBB-ROB-ARMA12` | HCM - 414 Lũy Bán Bích | Võ Minh Huân | `18:00 - 20:00` | 08/09/2026 | 08/12/2026 | 1/14 buổi (7%) | Đang học | Xem chi tiết, Sửa, Tải LMS, Học viên, Xóa |
 
 - **Giờ học (`classTime`)**: Trích xuất từ `scheduleSettings` hoặc slot đầu tiên, định dạng chuẩn Việt Nam UTC+7 (ví dụ: `18:00 - 20:00`).
 - **Giáo viên phụ trách (`teacherName`)**: Lấy từ danh sách giáo viên có số buổi dạy nhiều nhất.
+- **Thao tác nghiệp vụ đầy đủ**: Cột Thao tác cung cấp đầy đủ 5 chức năng:
+  1. **Xem chi tiết (`Eye`)**: Mở modal xem thông tin lớp và hạn nộp bài (chế độ chỉ xem).
+  2. **Chỉnh sửa (`Pencil`)**: Mở modal chỉnh sửa hạn nộp bài và cấu hình nộp trễ từng buổi.
+  3. **Tải dữ liệu từ LMS (`RefreshCw`)**: Đối chiếu và đồng bộ dữ liệu LMS.
+  4. **Quản lý học viên (`Users`)**: Mở modal đối chiếu và quản lý học viên lớp học.
+  5. **Gỡ lớp (`Trash2`)**: Xóa lớp khỏi danh sách quản lý và dọn dẹp học viên liên kết.
 - **Căn giữa chuẩn**: STT, Giáo viên phụ trách, Giờ học, Ngày bắt đầu, Ngày kết thúc, Tiến độ, Trạng thái, Thao tác đều được căn giữa (`text-center`) và áp dụng `whitespace-nowrap`.
 
-### 20.4 Modal Chi Tiết Lớp Học, Cấu Hình Hạn Nộp Bài & Danh Sách Học Viên Active
+### 20.4 Modal Chi Tiết Lớp Học, Cấu Hình Hạn Nộp Bài (Date Picker) & Nộp Trễ (2 Tùy Chọn)
 1. **Thông tin tổng quan (Chống rớt chữ & Bố cục tinh gọn)**: Thẻ ngang gồm Trạng thái, Giáo viên phụ trách, Giờ học, Tổng số buổi, và Thời gian học. Toàn bộ tiêu đề và nội dung thẻ đều áp dụng `whitespace-nowrap`, đảm bảo chuỗi ngày tháng liền mạch không bao giờ bị rớt dòng.
 2. **Cụm Tab Chuyển Đổi Tinh Gọn**:
-   - **Tab 1: 📅 Lịch trình & Hạn nộp bài (N buổi)**: Quản lý lịch trình các buổi học và hạn nộp bài tùy chỉnh.
+   - **Tab 1: 📅 Lịch trình, Hạn nộp bài & Nộp trễ (N buổi)**: Quản lý lịch trình các buổi học, hạn nộp bài bằng ô chọn ngày giờ và cấu hình nộp trễ.
    - **Tab 2: 👥 Danh sách học viên (M học viên)**: Hiển thị danh sách học viên active (đang học) có trong lớp học đó, kèm theo **Mã học viên** được tự động sinh theo quy chuẩn (Tên + Chữ cái đầu Họ đệm). Bảng gồm 4 cột tinh gọn: `[STT]` | `[Mã học viên]` | `[Họ và tên]` | `[Trạng thái]` (Đang học).
 3. **Bảng Lịch Trình Chi Tiết Các Buổi Học (Tab 1)**:
    - `Buổi`: Số thứ tự buổi học (1 đến N), căn giữa `whitespace-nowrap`.
    - `Ngày học`: Ngày diễn ra buổi học, định dạng chuẩn Việt Nam `whitespace-nowrap`.
    - `Giờ học`: Khung giờ của buổi học đó (`18:00 - 20:00`), `whitespace-nowrap`.
    - `Ghi chú mốc`: Huy hiệu Checkpoint 1, Checkpoint 2, và **SP Cuối Khóa (hiển thị liên tục trên toàn bộ các buổi từ sau buổi Checkpoint 2 đến buổi cuối cùng)** kèm viền và nền highlight hoa hồng nhẹ `bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30`.
-   - `Hạn nộp bài (Có thể chỉnh sửa)`: Ô nhập trực tiếp cho phép người dùng tùy chỉnh hạn nộp bài theo từng buổi.
-4. **Quy tắc hạn nộp bài mặc định tự động**:
-   - **Từ Buổi 1 đến Checkpoint 2 (buổi 1 -> cp2)**: Hạn nộp trong buổi học đó: `[Giờ bắt đầu] - [Giờ kết thúc, Ngày học]` (ví dụ: `18:00 - 20:00, 08/09/2026`).
-   - **Giai đoạn Sản phẩm cuối khóa (từ buổi ngay sau Checkpoint 2 đến buổi cuối)**: Toàn bộ các buổi trong giai đoạn này đều có **chung một hạn nộp thống nhất**: `[Giờ bắt đầu, Ngày học buổi sau CP2] - [Giờ kết thúc, Ngày học buổi cuối]` (ví dụ: `18:00, 29/10/2026 - 20:00, 08/12/2026`).
+   - `Hạn nộp bài (Date / Datetime picker)`: Thay vì nhập chuỗi thô thủ công, hệ thống sử dụng ô chọn ngày giờ (`input type="datetime-local"`) tiện lợi, tự động đồng bộ và định dạng hiển thị chuẩn toàn hệ thống: **Ngày Tháng Năm Giờ Phút** (`DD/MM/YYYY HH:mm` hoặc `DD/MM/YYYY HH:mm - HH:mm`).
+   - `Cho phép nộp trễ (Late Submission Config)`: Hỗ trợ nút bật/tắt nộp trễ cho từng buổi học với 2 tùy chọn cấu hình linh hoạt:
+     * **Tùy chọn 1 (Ngày giờ cụ thể)**: Người dùng chọn trực tiếp ngày giờ hết hạn nộp trễ qua ô `datetime-local` hiển thị chuẩn Ngày Tháng Năm Giờ Phút (`DD/MM/YYYY HH:mm`), với ràng buộc kỹ thuật **không được vượt quá ngày kết thúc lớp học (`class.endDate`)**.
+     * **Tùy chọn 2 (Khoảng thời gian)**: Người dùng thiết lập thời gian nộp trễ linh hoạt qua 4 ô nhập số: **Ngày, Giờ, Phút, Giây** (ví dụ: `+2 ngày 12 giờ 0 phút 0 giây`).
+4. **Quy tắc hạn nộp bài mặc định tự động (Chuẩn Ngày Tháng Năm Giờ Phút)**:
+   - **Từ Buổi 1 đến Checkpoint 2 (buổi 1 -> cp2)**: Hạn nộp trong buổi học đó: `[Ngày học] [Giờ bắt đầu] - [Giờ kết thúc]` (ví dụ: `08/09/2026 18:00 - 20:00`).
+   - **Giai đoạn Sản phẩm cuối khóa (từ buổi ngay sau Checkpoint 2 đến buổi cuối)**: Toàn bộ các buổi trong giai đoạn này đều có **chung một hạn nộp thống nhất**: `[Ngày học Giờ bắt đầu buổi sau CP2] - [Ngày học Giờ kết thúc buổi cuối]` (ví dụ: `29/10/2026 18:00 - 08/12/2026 20:00`).
 
-### 20.5 Kiểm Tra & Cảnh Báo Thay Đổi Thời Gian Thực Từ LMS & Đồng Bộ Chọn Lọc (Real-time LMS Change Detection & Granular Sync)
-- **Cơ chế Kiểm tra & Cảnh báo song song (Real-time Check)**:
-  - Khi tải danh sách lớp quản lý từ Supabase, hệ thống thực hiện truy vấn ngầm đối chiếu đồng thời với LMS (`POST /api/classes?type=check_lms_changes`).
-  - Đối chiếu toàn diện: Giáo viên phụ trách, Giờ học, Trạng thái, Số buổi học, Ngày bắt đầu/kết thúc, Tiến độ số buổi đã hoàn thành (`completedSessions`), và Số lượng học viên active (`students`).
-  - **Nếu phát hiện có sự thay đổi từ phía LMS**:
-    * Hệ thống hiển thị **Badge Cảnh Báo Nhấp Nháy (Icon `AlertTriangle`)** tại cột Mã Lớp: `LMS Đã Đổi (N mục)` kèm hiệu ứng rung/nhấp nháy tinh tế.
-    * Nút **"Tải dữ liệu từ LMS"** (icon `RefreshCw`) tại cột Thao tác xuất hiện một **chấm ping cam pulsing** biểu thị lớp này có cập nhật mới.
-- **Modal Đối Chiếu Thay Đổi LMS Side-by-Side (Bố Cục 5 Cột Chuẩn & Nút Đồng Bộ Tất Cả Ở Khúc Cuối)**:
-  - Khi người dùng bấm vào nút đồng bộ hoặc bấm vào badge cảnh báo, hệ thống mở **Modal Đối Chiếu Thay Đổi LMS**:
-    * Cột 1: **Áp dụng (Checkbox)** – Cho phép người dùng tích chọn riêng lẻ từng trường muốn cập nhật kèm nút *"Chọn tất cả"* / *"Bỏ chọn"*.
-    * Cột 2: **Đang thay đổi gì** – Tên thuộc tính rõ ràng (Giáo viên phụ trách, Khung giờ học, Ngày kết thúc, Trạng thái, Tiến độ, Danh sách học viên, v.v.).
-    * Cột 3: **Dữ liệu cũ (Supabase)** – Nền đỏ cam nhạt `bg-rose-500/10` nêu bật dữ liệu cũ đang sai lệch trên hệ thống.
-    * Cột 4: **Dữ liệu mới (LMS MindX)** – Nền xanh lá nhạt `bg-emerald-500/10` nêu bật dữ liệu thời gian thực mới nhất từ LMS.
-    * Cột 5: **Đồng bộ riêng** – Nút *"Cập nhật"* tức thì cho từng thuộc tính riêng lẻ.
-  - **Khúc cuối Modal (Modal Footer)**:
-    * Nút **"Bỏ qua / Đóng"**: Đóng modal mà không ghi đè dữ liệu.
-    * Nút **"Đồng bộ mục đã chọn (N)"**: Cập nhật chọn lọc đúng các mục được tích chọn qua checkbox.
-    * Nút **"Đồng bộ tất cả dữ liệu LMS"**: Nút nổi bật gradient xanh ngọc to nhất ở khúc cuối modal, cho phép người dùng đồng bộ 100% toàn bộ thông tin thay đổi từ LMS vào hệ thống chỉ với **1 cú nhấp chuột duy nhất**.
-  - **Bảo toàn hạn nộp bài tùy chỉnh**: Toàn bộ hạn nộp bài của từng slot buổi học mà người dùng đã cấu hình trước đó đều được bảo toàn nguyên vẹn.
-  - Sau khi cập nhật thành công, cờ cảnh báo của lớp đó tự động xóa bỏ.
-- **Nếu không có thay đổi**: Hệ thống thông báo dữ liệu lớp học đã hoàn toàn đồng bộ với LMS.
+### 20.5 Kiểm Tra & Tự Động Đồng Bộ Ngầm Thời Gian Thực Từ LMS (Real-time LMS Auto-Sync)
+- **Tự động đồng bộ ngầm 4 trường vận hành không bắt duyệt thủ công**:
+  - Khi hệ thống kiểm tra đối chiếu LMS (`check_lms_changes`), 4 trường vận hành gồm: **Tiến độ học tập (`progressPercent`)**, **Số buổi đã hoàn thành (`completedSessions`)**, **Ngày bắt đầu / Ngày kết thúc (`startDate`, `endDate`)**, và **Trạng thái lớp (`status`)** sẽ **tự động cập nhật ngầm vào Supabase DB theo thời gian thực** mà không đưa vào danh sách diff bắt người dùng duyệt tay.
+- **Cảnh báo thay đổi LMS tại cột Mã Lớp**:
+  - Đối với các trường nội dung khác có biến động (Giáo viên, Khung giờ, Học viên), hệ thống hiển thị **Badge Cảnh Báo Nhấp Nháy tại cột Mã Lớp (`LMS Đã Đổi`)**, chỉ hiển thị tại đúng cột Mã Lớp theo quy chuẩn.
+- **Đối chiếu học viên chính xác tuyệt đối & Xóa cờ cảnh báo tức thì**:
+  - Hệ thống kiểm tra số lượng học viên active thực tế trong cơ sở dữ liệu Supabase (với cơ chế làm mới bộ nhớ cache `getAllManagedStudentsMap(true)` và fallback dữ liệu học viên). Khi số lượng học viên trong lớp đã đồng bộ khớp với LMS, cảnh báo lệch học viên lập tức biến mất.
+  - Khi người dùng xác nhận cập nhật từ LMS (cả mục chọn hoặc toàn bộ) hoặc thao tác thêm/cập nhật học viên trong lớp, hệ thống lập tức xóa bỏ cờ diff khỏi `lmsChangesMap` và cập nhật state danh sách ngay tức thì (0ms trễ) mà không chờ polling.
+- **Bảo toàn hạn nộp bài tùy chỉnh**: Toàn bộ hạn nộp bài và cấu hình nộp trễ của từng slot buổi học mà người dùng đã cấu hình trước đó đều được bảo toàn nguyên vẹn khi đồng bộ từ LMS.
 
 ### 20.6 Danh Mục 56 Cơ Sở MindX Chính Thống (56 Official Campuses)
 - Rà soát toàn bộ danh mục cơ sở MindX qua GraphQL query LMS.
@@ -1160,12 +1087,17 @@ sequenceDiagram
 - **Cấu trúc cột bảng học viên (7 cột chuẩn)**:
 | STT | Mã Học Viên | Họ Và Tên | Lớp Đang Theo Học | Cơ Sở | Trạng Thái | Thao Tác |
 | :---: | :---: | :--- | :--- | :--- | :---: | :---: |
-| 1 | `VINHVQ` | Vũ Quang Vinh | `LBB-ROB-ARMA12` | HCM - 414 Lũy Bán Bích | Đang học | Đối chiếu LMS |
+| 1 | `VINHVQ` | Vũ Quang Vinh | `LBB-ROB-ARMA12` | HCM - 414 Lũy Bán Bích | Đang học | Xem, Sửa, Đối chiếu LMS, Xóa |
 
-- **Đồng bộ học viên với LMS (`POST /api/students/[id]/sync`)**:
-  - Nút **"Đối chiếu LMS"** (icon `RefreshCw`): So sánh thông tin học viên (Họ tên, Email, Số điện thoại, Trạng thái) với LMS thời gian thực.
-  - **Nếu không có thay đổi**: Hệ thống hiển thị thông báo: *"Thông tin học viên [Tên học viên] đã đồng bộ với LMS, không có sự thay đổi"*.
-  - **Nếu phát hiện thay đổi**: Hệ thống mở **Modal Đối Chiếu Học Viên Với LMS** hiển thị bảng so sánh side-by-side. Khi người dùng bấm *"Cập nhật từ LMS"*, hệ thống cập nhật thông tin mới nhất vào Supabase.
+- **Cảnh báo thay đổi LMS tại cột Họ và Tên**:
+  - Khi phát hiện thông tin học viên trên LMS có biến động (Họ tên, Trạng thái, Email, SĐT), hệ thống gắn trực tiếp **Badge Cảnh Báo `LMS Đã Đổi`** (icon `AlertCircle`) ngay cạnh Họ và Tên của học viên.
+- **Tự động chuyển lớp ngầm cho học viên (Automatic Class Transfer Sync)**:
+  - Nếu học viên thay đổi lớp học hiện tại từ LMS sang lớp khác, hệ thống **tự động cập nhật ngầm lớp học mới vào Supabase DB ngay lập tức** mà không bắt người dùng phải chờ duyệt thủ công.
+- **Thao tác nghiệp vụ đầy đủ trên từng học viên**:
+  1. **Xem chi tiết (`Eye`)**: Mở modal xem thông tin học viên, mã học viên, lớp học và thông tin liên hệ.
+  2. **Chỉnh sửa (`Pencil`)**: Mở modal chỉnh sửa họ tên, trạng thái và lớp học của học viên trong Supabase DB (`PUT /api/students/[id]`).
+  3. **Đối chiếu LMS (`RefreshCw`)**: So sánh thông tin học viên với LMS thời gian thực. Nếu có thay đổi, mở modal đối chiếu side-by-side để cập nhật; sau khi cập nhật thành công, xóa ngay cờ cảnh báo diff real-time.
+  4. **Xóa học viên (`Trash2`)**: Mở modal xác nhận an toàn để xóa học viên khỏi danh sách quản lý (`DELETE /api/students/[id]`).
 - **Tự động xóa học viên khi gỡ lớp**:
   - Khi một lớp học bị gỡ khỏi danh sách quản lý, toàn bộ học viên thuộc lớp đó sẽ tự động được dọn dẹp sạch sẽ khỏi bảng `managed_students`.
 
@@ -1223,10 +1155,273 @@ sequenceDiagram
   - **Hủy liên kết tài khoản Google Drive**: Loại `warning` (Hổ phách `amber`), thông báo giảng viên sẽ cần phải liên kết lại khi đăng nhập.
 - Trải nghiệm an toàn & Chống bấm đúp: Nền mờ kính cao cấp `backdrop-blur-sm`, nút xác nhận tích hợp biểu tượng xoay tải (`Loader2`) và tự động vô hiệu hóa (`disabled`) khi đang gửi yêu cầu mạng lên máy chủ.
 
+---
+
+## 24. Luồng Quản Lý Định Mức Nộp Bài Học Viên (Student Submission Quota Flow)
+
+### 24.1 Mô Hình Phân Cấp Định Mức (4 Cấp Bậc Phân Quyền)
+Nhằm kiểm soát dung lượng lưu trữ đám mây Google Drive của giáo viên và ngăn chặn học viên tải lên tệp tin rác quá lớn, hệ thống áp dụng cơ chế phân cấp định mức 4 tầng:
+
+```mermaid
+graph TD
+    A[1. Quản Trị Viên (Admin)] -->|Cấu hình mức trần maxQuotaMb (10 - 500MB)| B[2. Giáo Viên Part-time]
+    B -->|Tùy chỉnh định mức mặc định defaultStudentQuotaMb (1 - maxQuotaMb) trong /profile| C[3. Đồng Bộ Lớp / Học Viên Mới]
+    C -->|Gán tự động submissionQuotaMb cho học viên| D[4. Học Viên (managed_students)]
+    A -->|Có quyền sửa định mức riêng của từng học viên| D
+    B -->|Có quyền sửa định mức riêng của học viên lớp mình| D
+```
+
+1. **Cấp 1 - Quản Trị Viên (Admin Scope)**:
+   - Tại màn hình Quản lý tài khoản (`UserManagementScreen.tsx`), chỉ Quản trị viên mới thấy nút icon **`HardDrive` (Định mức nộp)** tại cột Thao Tác của các giáo viên Part-time.
+   - Mở modal cấu hình định mức trần (`maxQuotaMb`, từ 10MB đến 500MB, mặc định 100MB) cho từng giáo viên. Cập nhật qua `PATCH /api/admin/users/[id]` với trường `max_submission_quota_mb`.
+2. **Cấp 2 - Giáo Viên Part-time (Teacher Scope)**:
+   - Tại trang Hồ sơ cá nhân (`/profile`), **chỉ tài khoản Giáo viên Part-time** mới hiển thị Card *"Định mức nộp bài cho học viên"*.
+   - Cho phép giáo viên kéo thanh trượt / nhập số để tùy chỉnh định mức mặc định cho học viên của mình (`defaultStudentQuotaMb`, từ 1MB đến `max_submission_quota_mb`, mặc định 50MB).
+   - Khi lưu hồ sơ, gọi `PATCH /api/profile` để lưu vào Supabase `system_settings` (key: `teacher_quotas`) và bảng `users`.
+3. **Cấp 3 - Cơ Chế Kế Thừa Khi Tạo / Đồng Bộ Học Viên**:
+   - Khi giáo viên thêm lớp hoặc đồng bộ học viên vào Supabase (`syncStudentsForClass`), hệ thống tự động tra cứu `defaultStudentQuotaMb` của giáo viên phụ trách lớp và gán trực tiếp vào `submissionQuotaMb` của từng học viên mới.
+4. **Cấp 4 - Quản Lý Định Mức Tại Màn Hình Học Viên (`StudentManagementScreen.tsx`)**:
+   - Bảng quản lý học viên bổ sung cột thứ 8: **"Định Mức Nộp"** (căn giữa, badge xám/ruby nổi bật kèm đơn vị `MB`).
+   - Modal xem chi tiết học viên hiển thị rõ hạn mức lưu trữ của học viên.
+   - Modal chỉnh sửa học viên cho phép cập nhật riêng định mức `submissionQuotaMb` cho từng học viên cụ thể qua `PUT /api/students/[id]`.
+
+### 24.2 Cơ Chế Lưu Trữ Bền Vững Trực Tiếp Trên Supabase Database (Supabase Quotas Persistence)
+Toàn bộ hạn mức dữ liệu nộp bài của giáo viên và từng học viên được lưu trữ và truy vấn trực tiếp trên cơ sở dữ liệu Supabase theo kiến trúc hai lớp (Dual-Layer Supabase Architecture):
+1. **Lớp Cấu Hình Định Mức Giáo Viên**:
+   - Lưu trữ tập trung tại bảng `system_settings` với khóa `key = 'teacher_quotas'`.
+   - Đồng bộ song song vào bảng `users` với 2 cột `max_submission_quota_mb` và `default_student_quota_mb`.
+   - Dịch vụ `teacher-quota-service.ts` ưu tiên đọc dữ liệu tươi từ Supabase, tự động đối chiếu linh hoạt theo UUID hoặc mã LMS.
+2. **Lớp Định Mức Học Viên Riêng Lẻ**:
+   - Lưu trữ bản đồ định mức riêng biệt tại bảng `system_settings` với khóa chuyên trách `key = 'student_quotas'` (`{ [studentId]: quotaMb }`), kết hợp lưu cùng danh sách `managed_students`.
+   - Đồng bộ trực tiếp vào cột `submission_quota_mb` của bảng `managed_students` trên Supabase.
+   - Khi đọc danh sách học viên (`getAllManagedStudentsMap`), hệ thống tự động tải bản đồ `student_quotas` từ Supabase và gán khớp chuẩn xác vào từng học viên.
+   - Mọi thao tác chỉnh sửa hạn mức học viên từ giao diện quản lý ngay lập tức đẩy dữ liệu lên Supabase qua API `PUT /api/students/[id]`.
+
+---
+
+## 25. Luồng Cổng Nộp Bài Học Viên & Xác Thực Đa Tầng (Student Submission Portal & Verification Flow)
+
+### 25.1 Điểm Truy Cập & Tách Biệt Menu Sidebar Khách vs Đã Đăng Nhập (Hiển Thị Sidebar Toàn Diện Trên Mọi Giao Diện Khách)
+- **Hiển Thị Sidebar Toàn Diện Trên Mọi Giao Diện Khách (Full Guest Sidebar Coverage)**:
+  - Toàn bộ các trang công khai/giao diện khách bao gồm: **Trang chủ (`/`)**, **Cổng nộp bài (`/submit`)**, **Đăng nhập (`/login`)**, **Nhật ký phiên bản (`/changelog`)**, **Chính sách quyền riêng tư (`/privacy`)**, và **Trang 404 (`/not-found`)** đều được bao bọc thống nhất trong `AppLayout`.
+  - Mọi người dùng dù chưa đăng nhập khi truy cập bất kỳ trang nào đều nhìn thấy **Sidebar bên trái** hoàn chỉnh, hỗ trợ co giãn thu gọn linh hoạt và Drawer cảm ứng trên thiết bị di động.
+- **Khi là khách / học viên (Chưa đăng nhập)**:
+  - Sidebar bên trái hoạt động độc lập, tinh gọn chỉ gồm 2 mục điều hướng trực tiếp: *"Trang chủ"* (`/`) và *"Cổng nộp bài"* (`/submit`). Tuyệt đối không tạo nhóm accordion chevrons rườm rà.
+  - Dưới đáy sidebar: Khi ở Trang chủ hiển thị nút *"Đăng Nhập"* (`/login`); khi ở các trang khác hiển thị nút *"Xem Trang Chủ"* (`/`).
+  - Nút *"Đăng nhập"* trên Header tự động ẩn khi người dùng đang ở chính trang `/login` để tránh dư thừa giao diện.
+- **Sau khi đăng nhập**: Sidebar hiển thị các nhóm quản trị nghiệp vụ theo phân quyền vai trò (`QUẢN LÝ HỆ THỐNG`, `KIỂM TRA DỮ LIỆU`). Mục *"Cổng nộp bài"* được hiển thị trực tiếp thành 1 mục đơn lẻ bên dưới các nhóm, không bọc trong nhóm menu chính `HỌC VIÊN` hay tạo mũi tên dropdown riêng.
+- **Header Tinh Gọn**: Tuyệt đối không đặt nút nộp bài trên thanh Header để giữ Header tinh gọn, đồng bộ chuẩn mực nhận diện thương hiệu. Mọi giao diện đều kế thừa `AppLayout`.
+
+### 25.2 Ô Nhập Mã Truy Cập Nhanh
+- Đầu trang cung cấp ô nhập *"Mã truy cập"* (Access Code) kèm nút *"Truy cập"* liền kề để phục vụ tính năng mở khóa nhanh bài nộp hoặc xác thực nâng cao.
+
+### 25.3 Luồng Chọn Tuần Tự 5 Tầng Thác Nước & Quy Chuẩn Nhãn Dropdown Không Chứa Mở Ngoặc
+Để đảm bảo tính toàn vẹn dữ liệu và trải nghiệm người dùng sạch sẽ, dễ đọc nhất:
+- **Quy chuẩn nhãn hiển thị Dropdown (Không chứa nội dung trong ngoặc đơn)**:
+  * **Họ tên Giáo viên**: Chỉ hiển thị thuần túy `{t.fullName}` (tuyệt đối không kèm mã `({t.lmsCode})`).
+  * **Tên Lớp học**: Chỉ hiển thị tên lớp và khóa học `{c.name} • {c.courseName}` (tuyệt đối không kèm tên cơ sở `({c.centreName})`).
+  * **Họ tên Học viên**: Chỉ hiển thị thuần túy `{s.fullName}` (tuyệt đối không kèm mã `({s.studentCode})`).
+  * **Placeholder tinh gọn**: Viết ngắn gọn, chỉ kêu điền/chọn gì (`-- Chọn giáo viên --`, `-- Chọn lớp học --`, `-- Chọn học viên --`, `-- Chọn giai đoạn --`), tuyệt đối không giải thích dài dòng hay nêu ví dụ.
+
+- **Cơ chế khóa tầng (Cascading Lock)**:
+  1. **Bước 1: Chọn Giáo Viên (Teacher Selection)**:
+     - Chỉ hiển thị các giáo viên thỏa mãn đồng thời 3 điều kiện:
+       + Vai trò là **Giáo viên Part-time** (`Teacher Part-time`).
+       + Trạng thái tài khoản đã được phê duyệt (**`approved`**).
+       + Đã hoàn tất liên kết tài khoản lưu trữ đám mây qua **Google Drive OAuth**.
+  2. **Bước 2: Chọn Lớp Học (Class Selection)**:
+     - Khóa khi chưa chọn giáo viên. Hiển thị danh sách lớp do giáo viên đã chọn phụ trách (kèm tên môn học).
+  3. **Bước 3: Chọn Học Viên (Student Selection)**:
+     - Khóa khi chưa chọn lớp học. Hiển thị danh sách học viên trong lớp theo tên sạch không kèm ngoặc đơn.
+     - Đã loại bỏ hiển thị định mức tại nhãn Bước 3 để chuyển xuống khu vực chuyên trách trước phần chọn hình thức nộp bài.
+  4. **Bước 4: Chọn Giai Đoạn (Phase Selection)**:
+     - Khóa khi chưa chọn học viên.
+     - Bổ sung giai đoạn **"Buổi học thường"** gồm tất cả các buổi học không thuộc các mốc đặc biệt (Checkpoint 1, Checkpoint 2, SPCK). Danh sách buổi học thường được lưu bền vững vào Supabase tại cột `regular_sessions` (JSONB) của bảng `managed_classes`.
+     - Các giai đoạn gồm:
+       * *Buổi học thường (Regular Sessions)*: Các buổi học thông thường trên lớp.
+       * *Giai đoạn 1 (Checkpoint 1)*: Buổi kiểm tra / dự án giai đoạn 1.
+       * *Giai đoạn 2 (Checkpoint 2)*: Buổi kiểm tra / dự án giai đoạn 2.
+       * *Dự án cuối khóa (SPCK)*: Buổi báo cáo sản phẩm cuối khóa.
+  5. **Bước 5: Chọn Buổi Học & Giới Hạn Cố Định Theo Giai Đoạn (Strict Phase-Scoped Sessions)**:
+     - Khóa khi chưa chọn giai đoạn.
+     - **Chỉ hiển thị và cho phép chọn duy nhất các buổi học thuộc giai đoạn đã chọn** (`sessionNumbers`), học viên không thể xem hoặc chọn các buổi học nằm ngoài giai đoạn đó.
+     - Mỗi thẻ buổi học hiển thị huy hiệu trạng thái tương ứng:
+       * 🟢 *Xanh lá*: Còn hạn nộp.
+       * 🔴 *Đỏ Ruby*: Quá hạn nộp.
+       * 🟡 *Vàng Hổ Phách*: Nộp muộn cho phép.
+       * 🔵 *Xanh Dương*: Chưa mở / Sắp mở.
+
+### 25.4 Khu Vực Hạn Mức Nộp Bài & Trạng Thái Hạn Nộp Của Buổi Học (Quota & Deadline Status Banner)
+Đặt cố định ngay sau Bước 5 (chọn buổi học) và trước khu vực lựa chọn hình thức nộp bài:
+1. **Hạn Mức Nộp Bài Học Viên**:
+   - Thẻ hiển thị dung lượng tối đa học viên được nộp trong một lần (ví dụ: `50 MB`), kèm họ tên học viên đang chọn.
+2. **Huy Hiệu Trạng Thái Hạn Nộp 4 Màu Sắc**:
+   - 🟢 **Màu Xanh Lá (Đang trong hạn nộp)**: Thời gian hiện tại nằm trong khung thời gian mở nộp bài hợp lệ. Cổng nộp bài mở hoàn toàn.
+   - 🔴 **Màu Đỏ Ruby (Đã hết hạn nộp - Khóa cổng nộp bài)**: Đã vượt quá hạn nộp bài cho phép. Hệ thống lập tức hiển thị cảnh báo đỏ và **khóa toàn bộ khu vực nộp bài** (vô hiệu hóa kéo thả tệp tin, ô chọn file, ô nhập liên kết và nút nộp).
+   - 🟡 **Màu Vàng Hổ Phách (Hết hạn chính thức - Cho phép nộp muộn)**: Đã quá hạn nộp bài chính thức của buổi học nhưng vẫn nằm trong khung thời gian nộp muộn gia hạn. Cho phép học viên tiếp tục nộp bài kèm ghi nhận cờ nộp muộn (`isLate`).
+   - 🔵 **Màu Xanh Dương (Chưa mở / Sắp mở)**: Buổi học chưa đến thời gian cho phép nộp bài. Hệ thống khóa cổng nộp bài và thông báo thời gian mở dự kiến.
+
+### 25.5 Phương Thức Nộp Bài Đa Năng (File Dropzone & Link Submission)
+Khi cổng nộp bài ở trạng thái mở (`canSubmit === true`), học viên được lựa chọn giữa 2 hình thức:
+1. **Nộp Tệp Tin (File Dropzone)**:
+   - Hỗ trợ kéo thả hoặc bấm tải lên các tệp tin bài làm (`.zip`, `.rar`, `.pdf`, `.docx`, `.pptx`, `.png`, `.jpg`,...).
+   - Đo lường dung lượng tệp tin tải lên theo thời gian thực và so sánh với định mức của học viên (`submissionQuotaMb`).
+   - Thanh tiến trình hiển thị trực quan dung lượng đã dùng: `X.XX MB / Y MB (Z%)`. Nếu tổng dung lượng vượt quá định mức, hệ thống cảnh báo đỏ và khóa nút gửi bài.
+2. **Nộp Liên Kết (Link Submission) & Kiểm Tra Quyền Truy Cập**:
+   - Hỗ trợ nhập liên kết sản phẩm (Canva, Google Drive, Figma, GitHub, Scratch, hoặc trang web công khai).
+   - Tích hợp nút **"Kiểm tra quyền truy cập"**: Gọi API `POST /api/submission/check-link` để kiểm tra liên kết có đang mở quyền truy cập công khai cho mọi người xem hay không. Báo xanh nếu liên kết truy cập được, hoặc cảnh báo nếu liên kết bị khóa riêng tư.
+
+### 25.6 Nút Nộp Bài Thông Minh (Smart Submission Button)
+
+---
+
+## 26. Luồng Quản Lý Học Viên & Tự Động Điều Chuyển Giáo Viên Phụ Trách (Student-Teacher Dynamic Scoping & Transfer Flow)
+
+### 26.1 Phân Quyền Hiển Thị Dữ Liệu Theo Giáo Viên Phụ Trách
+- **Nguyên tắc cốt lõi**: Giáo viên (Full-time hoặc Part-time) chỉ được xem và quản lý những học viên thuộc các lớp mà mình đang trực tiếp phụ trách giảng dạy.
+- **Tài khoản Quản trị viên (Admin / Super Admin)**: Được xem và quản lý toàn bộ học viên thuộc tất cả các cơ sở trực thuộc được cấp quyền.
+- **Cơ chế khớp định danh đa dạng**:
+  * Khớp mã LMS của giáo viên (`user.lmsCode`) trong danh sách mã giáo viên của lớp (`currentClass.teacherCodes`).
+  * Khớp họ tên đầy đủ đã được chuẩn hóa (`normalizeTeacherName(user.fullName)`) với họ tên giáo viên trong lớp (`currentClass.teacherName`). Chuẩn hóa tự động lược bỏ các hậu tố phụ trách như `(LEC)`, `(TA)` và các tiền tố chức danh (`TF`, `GV`, `TA`, `Thầy`, `Cô`).
+  * Khớp định danh tài khoản đã tạo lớp học (`currentClass.addedBy`).
+
+### 26.2 Cơ Chế Tự Động Cập Nhật Khi Học Viên Chuyển Lớp (Thầy A $\rightarrow$ Thầy B)
+Khi học viên có sự thay đổi về lớp học:
+1. **Trường hợp học viên đang học lớp do Thầy A phụ trách**:
+   - Dữ liệu `teacher_name` và `teacher_codes` trên Supabase ghi nhận Thầy A.
+   - Chỉ Thầy A xem được học viên này trên giao diện Quản lý học viên và Cổng nộp bài. Thầy B hoàn toàn không nhìn thấy học viên này.
+2. **Trường hợp học viên chuyển sang lớp do Thầy B phụ trách**:
+   - Khi hệ thống đồng bộ danh sách lớp hoặc khi giáo viên/quản trị viên tải dữ liệu học viên, hàm `reconcileStudentsWithClasses()` sẽ tự động đối chiếu lớp học hiện tại của học viên:
+     * Cập nhật `teacher_name` và `teacher_codes` sang Thầy B.
+     * Cập nhật `class_name` và `class_id` sang lớp mới của Thầy B.
+     * Tự động lưu vết lịch sử: `last_teacher_name` ghi nhận Thầy A, `last_class_name` ghi nhận lớp trước đó.
+   - **Kết quả hiển thị tức thì**: Thầy B giờ đây xem và quản lý được học viên này. Ngược lại, Thầy A **hoàn toàn không còn nhìn thấy học viên này nữa** (đảm bảo tính bảo mật và đúng phạm vi phụ trách).
+
+### 26.3 Cơ Chế Bảo Toàn Giáo Viên Phụ Trách Gần Nhất (Fallback Khi Lớp Không Xác Định)
+- Trong trường hợp lớp học hiện tại của học viên **không xác định được** (ví dụ: lớp học đã kết thúc và bị gỡ khỏi hệ thống, học viên tạm ngưng học hoặc đang chờ xếp lớp mới):
+  * Hệ thống tự động kích hoạt cơ chế bảo toàn giáo viên phụ trách gần nhất: Giữ nguyên `last_teacher_name` và `last_teacher_codes`.
+  * Giáo viên phụ trách gần nhất đó vẫn tiếp tục xem được học viên trong danh mục quản lý của mình để hỗ trợ kiểm tra thông tin, xem lại bài nộp cũ hoặc theo dõi tiến trình của học viên.
+  * Trên giao diện bảng học viên, nhãn phụ `(Gần nhất)` màu hổ phách được hiển thị để phân biệt rõ ràng với các lớp đang hoạt động chính thức.
+
+### 26.4 Cấu Trúc Bảng Dữ Liệu Bền Vững Trên Supabase
+Bảng `managed_students` được mở rộng các trường dữ liệu:
+- `teacher_name` (TEXT): Tên giáo viên phụ trách lớp học hiện tại.
+- `teacher_codes` (JSONB): Mảng mã LMS của các giáo viên phụ trách lớp học hiện tại.
+- `last_teacher_name` (TEXT): Tên giáo viên phụ trách gần nhất (dùng khi lớp học không xác định hoặc khi chuyển lớp).
+- `last_teacher_codes` (JSONB): Mảng mã LMS của giáo viên phụ trách gần nhất.
+- `last_class_id` (TEXT): ID của lớp học trước đó.
+- `last_class_name` (TEXT): Tên của lớp học trước đó.
+- Dữ liệu được đồng bộ song song với bảng `system_settings` (khóa `managed_students`) đảm bảo hệ thống vận hành bền vững 100% trên cả môi trường local lẫn Vercel Serverless.
 
 
 
 
 
 
+
+
+
+
+
+---
+
+## 27. Luồng Tự Động Phân Định Vai Trò Giáo Viên Lớp Học (Teacher Role Deduction: LEC, TA, Supply)
+
+### 27.1 Quy Tắc Phân Biệt Thực Tế Dựa Trên Dữ Liệu Điểm Danh LMS
+Khi đồng bộ hoặc kiểm tra thông tin lớp học từ LMS MindX GraphQL, hệ thống quét qua danh sách phân công lớp (`c.teachers`), danh sách phân công từng buổi (`slots[].teachers`) và dữ liệu điểm danh thực tế (`slots[].teacherAttendance` với trạng thái `ATTENDED`):
+1. **Giảng viên chính (LEC - Lecturer)**:
+   - Giáo viên có số buổi đứng lớp thực tế nhiều nhất (`attendedCount` lớn nhất).
+   - Trong trường hợp số buổi điểm danh bằng nhau, hệ thống ưu tiên giáo viên được phân công chính thức làm Giảng viên (`assignedRole === 'LEC'`) và có số lượng ca dạy được phân công (`slotCount`) nhiều hơn.
+2. **Trợ giảng (TA - Teaching Assistant)**:
+   - Giáo viên được phân công vai trò TA trên LMS, HOẶC:
+   - Giáo viên cùng tham gia điểm danh trong cùng một buổi học với Giảng viên chính (`coAttendedCount > 0` và `coAttendedCount >= soloAttendedCount`).
+3. **Giáo viên dạy thay (Supply)**:
+   - Giáo viên được phân công vai trò Supply trên LMS, HOẶC:
+   - Giáo viên chỉ tham gia đứng lớp một mình ở các buổi mà Giảng viên chính vắng mặt (`soloAttendedCount > 0` và `coAttendedCount === 0`), thay thế cho Giảng viên chính.
+
+### 27.2 Thứ Tự Ưu Tiên & Định Dạng Hiển Thị
+- Định dạng chuỗi: `Tên Giáo Viên (Role)` (Ví dụ: `Huỳnh Nhật Anh (LEC), Lê Ngọc Tú (TA)`, hoặc `Huỳnh Nhật Anh (LEC), Nguyễn Quốc Thành (Supply)`).
+- Thứ tự sắp xếp ưu tiên: `LEC` -> `TA` -> `Supply` -> `Mentor`.
+
+
+---
+
+## 28. Quy Chuẩn Tự Động Đồng Bộ Dữ Liệu LMS & Hệ Thống Thông Báo Tổng Hợp (LMS Auto-Sync & Notification Center)
+
+### 28.1 Cơ Chế Tự Động Cập Nhật Thay Đổi Dữ Liệu LMS vào Supabase
+1. **Tự động hóa hoàn toàn (Zero Manual Diff Confirmation)**:
+   - Khi phát hiện bất kỳ thay đổi nào từ LMS đối với dữ liệu lớp học (`managed_classes`) hoặc học viên (`managed_students`) mà hệ thống có lưu trữ, máy chủ tự động cập nhật ngay lập tức các thay đổi đó vào cơ sở dữ liệu Supabase (`saveAllManagedClassesMap`, `syncStudentsForClass`, `system_settings`).
+   - Người dùng không cần phải bấm xác nhận thủ công từng mục thay đổi qua modal so sánh nữa.
+2. **Lưu trữ và Truy xuất Thông báo Hệ thống**:
+   - Mọi thay đổi được tự động ghi nhận vào trung tâm thông báo (`addSystemNotification`) với loại `LMS_SYNC`.
+   - Danh sách chi tiết thay đổi (`details`) lưu trữ rõ ràng các trường dữ liệu trước và sau khi thay đổi (Ví dụ: `Sĩ số học viên: "12" ➔ "14"`, `Trạng thái: "OPEN" ➔ "RUNNING"`).
+   - Dữ liệu thông báo được lưu trữ bền vững trên Supabase (`system_settings` với key = `system_notifications`) và file dự phòng `data/system_notifications_store.json`.
+
+### 28.2 Cơ Chế Kiểm Tra Thông Báo Hai Chiều (Dual Access Point for Notifications)
+Hệ thống hỗ trợ 2 cách tiếp cận thông báo khi người dùng **đã đăng nhập** (`isAuthenticated === true`):
+1. **Cách 1: Biểu tượng chiếc chuông (Bell Icon) trên Thanh Điều Hướng (Top Header)**:
+   - Đặt tại góc phải Header, nằm cạnh nút Đổi Giao Diện Sáng/Tối và cụm User Profile.
+   - Hiển thị badge màu đỏ đếm số lượng thông báo mới chưa đọc (`unreadCount`).
+   - Nhấp vào biểu tượng chuông để mở popover danh sách thông báo.
+   - Hỗ trợ nút "Đã đọc hết", nút "Xóa tất cả", và nút đánh dấu đã đọc / xóa từng thông báo riêng lẻ.
+2. **Cách 2: Mục "Thông báo hệ thống" trong Menu Người Dùng (User Profile Dropdown)**:
+   - Trong dropdown mở ra khi nhấp vào Avatar / Họ tên người dùng, hiển thị mục "Thông báo hệ thống" đi kèm icon `Bell` và badge hiển thị số lượng thông báo chưa đọc.
+   - Nhấp vào mục này sẽ tự động đóng menu và mở giao diện xem thông báo hệ thống.
+3. **Đồng Bộ Thời Gian Thực (Real-time Event Dispatch)**:
+   - Bất kỳ khi nào có dữ liệu cập nhật tự động từ LMS hoặc thông báo gửi Telegram thành công, hệ thống phát sự kiện `smh:notifications_updated` trên `window` để cập nhật số đếm chuông thông báo ngay tức thì mà không cần tải lại toàn bộ trang.
+
+---
+
+## 29. Quy Chuẩn Hẹn Giờ Gửi Thông Báo Lịch Trải Nghiệm Qua Telegram Bot (Scheduled Telegram Trial Reminder)
+
+### 29.1 Cấu Hình & Lưu Trữ Cài Đặt Hẹn Giờ
+- **Cấu hình chu kỳ**:
+  - Hàng ngày (`DAILY`): Gửi đều đặn mỗi ngày một lần.
+  - Hàng tuần (`WEEKLY`): Chọn các ngày cố định trong tuần (Thứ 2 đến Chủ nhật) để gửi.
+  - Hàng tháng (`MONTHLY`): Chọn một ngày cụ thể trong tháng (Ngày 01 đến 31) để gửi.
+- **Khung giờ gửi**: Định dạng giờ Việt Nam `HH:mm` (Ví dụ `08:00`, `19:00`).
+- **Phạm vi ngày thông báo**:
+  - Lịch Hôm Nay (`TODAY`): Gửi danh sách ca trải nghiệm diễn ra trong chính ngày gửi tin.
+  - Lịch Ngày Mai (`TOMORROW`): Gửi trước lịch ca trải nghiệm cho ngày hôm sau để giáo viên và ban quản lý chuẩn bị trước.
+- **Lưu trữ cấu hình**: Lưu tập trung trên bảng `system_settings` của Supabase (key = `trial_schedule_telegram_settings`) và file dự phòng `data/trial_schedule_telegram_settings.json`.
+
+### 29.2 Định Dạng Tin Nhắn Telegram Chuẩn Trực Quan (HTML Format)
+- Gửi trực tiếp tới kênh đích cấu hình trong `.env` (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`).
+- Tin nhắn sử dụng định dạng `HTML` trực quan:
+  - Tiêu đề ngày trải nghiệm, thời gian xuất thông báo, tổng số ca.
+  - Nhóm theo từng Cơ Sở (`🏢 CƠ SỞ: [TÊN CƠ SỞ]`).
+  - Từng ca trải nghiệm thể hiện rõ: Ca học, Khối môn (`💻 CODING`, `🎨 ART`, `🤖 ROBOTICS`), Khung giờ, Tên Mentor phụ trách, Số lượng học viên, và Ghi chú ca (nếu có).
+  - Tự động phân tách nhiều tin nhắn an toàn nếu độ dài vượt quá giới hạn 4096 ký tự của Telegram Bot API.
+
+### 29.3 Thao Tác Thử Nghiệm & Tích Hợp Thông Báo Hệ Thống
+- Màn hình Lịch trải nghiệm (`TrialSchedulesScreen`) tích hợp nút "Báo Telegram" trên thanh công cụ mở Modal cài đặt trực quan.
+- Hỗ trợ nút **"Gửi thử ngay bây giờ" (Test Send)** cho phép kiểm tra tin nhắn Telegram thực tế của ngày đang xem.
+- Mỗi lần gửi tin nhắn thành công (cả gửi thử nghiệm lẫn chạy tự động), hệ thống tự động sinh 1 thông báo hệ thống loại `TELEGRAM_REMINDER` gửi đến chuông thông báo trên Header và menu người dùng để quản trị viên dễ dàng theo dõi nhật ký gửi.
+
+---
+
+## 30. Quy Chuẩn Thống Kê Lượt Truy Cập Tài Khoản & Toàn Trang Lưu Supabase (Account & Global Visit Stats)
+
+### 30.1 Cơ Chế Phân Định Lượt Truy Cập (Account Visits vs Global Visits)
+- **Lượt Truy Cập Tài Khoản (Account Visits)**:
+  - Mỗi khi một tài khoản đã đăng nhập (`admin`, `teacher-fulltime`, `teacher-parttime`) truy cập vào hệ thống hoặc tải trang Dashboard của mình, hệ thống tự động nhận diện danh tính người dùng thông qua Cookie / JWT (`smh_token` / `user_id`).
+  - Lượt truy cập của chính tài khoản đó được tích lũy riêng biệt theo mã định danh `user_id` (`accountVisits[userId]`).
+  - Trên màn hình Dashboard của từng vai trò (`/admin/dashboard`, `/teacher-fulltime/dashboard`, `/teacher-parttime/dashboard`), thẻ thống kê hiển thị tiêu đề chuẩn **"Lượt Truy Cập Tài Khoản"**, phản ánh chính xác số lần người dùng sở hữu tài khoản đó đã đăng nhập/vào xem hệ thống.
+  - Thẻ Dashboard của Admin bổ sung phụ đề chi tiết thể hiện tổng quan toàn hệ thống (bao gồm tổng lượt của tất cả thành viên và khách vãng lai).
+- **Tổng Lượt Truy Cập Toàn Trang (Global Visits)**:
+  - Công thức tính toán tổng lượt truy cập toàn trang:
+    $$\text{Tổng Lượt Truy Cập} = \text{Tổng Lượt Tất Cả Tài Khoản (Total Account Visits)} + \text{Lượt Truy Cập Của Khách (Guest Visits)}$$
+  - Khách vãng lai chưa đăng nhập khi truy cập trang web (Trang chủ `/`, `/submit`, `/login`, v.v.) được ghi nhận vào `guestVisits`.
+  - Phù hiệu nổi ở góc phải màn hình (`FloatingVisitBadge`) và các thống kê toàn trang hiển thị con số tổng hợp toàn bộ lượt truy cập này.
+
+### 30.2 Lưu Trữ Bền Vững Trực Tiếp Trên Supabase Database
+- Toàn bộ dữ liệu thống kê được lưu trữ đồng bộ, lâu dài trên cơ sở dữ liệu Supabase tại bảng `system_settings` với bản ghi `key = 'site_stats'`:
+  - `total_account_visits`: Tổng lượt truy cập tích lũy của toàn bộ các tài khoản.
+  - `guest_visits`: Tổng lượt truy cập của khách vãng lai.
+  - `account_visits`: Bản đồ (`Record<string, number>`) lưu số lượt truy cập chi tiết của từng `user_id`.
+  - `total_visits`: Tổng lượt truy cập toàn trang (tài khoản + khách).
+  - `last_updated`: Thời điểm cập nhật dữ liệu gần nhất (ISO timestamp).
+- Hệ thống hỗ trợ file dự phòng cục bộ `data/site_stats.json` để đảm bảo hệ thống luôn đọc/ghi mượt mà cả khi kết nối mạng tạm thời gián đoạn.
+- **Cơ chế chống đếm trùng lặp (Debounce Control)**:
+  - Do `FloatingVisitBadge` và `Dashboard` có thể gọi API cùng lúc khi tải trang, hệ thống tích hợp bộ nhớ đệm chống tăng trùng lặp (debounce 2.000ms theo từng người dùng / session) để mỗi phiên tải trang chỉ được tính đúng 1 lượt duy nhất.
 

@@ -17,13 +17,21 @@ import { API_ROUTES } from "@/lib/constants/api-routes";
 
 interface AdminStats {
   total_accounts: number;
+  account_visits: number;
   total_visits_admin: number;
+  total_visits_global: number;
+  total_account_visits: number;
+  guest_visits: number;
 }
 
 export default function AdminDashboardPage() {
   const [stats, setStats] = useState<AdminStats>({
     total_accounts: 0,
+    account_visits: 0,
     total_visits_admin: 0,
+    total_visits_global: 0,
+    total_account_visits: 0,
+    guest_visits: 0,
   });
   const [loading, setLoading] = useState(true);
 
@@ -35,7 +43,11 @@ export default function AdminDashboardPage() {
       if (res.ok && data.stats) {
         setStats({
           total_accounts: data.stats.total_accounts || 0,
+          account_visits: data.stats.account_visits || data.stats.total_visits_admin || 0,
           total_visits_admin: data.stats.total_visits_admin || 0,
+          total_visits_global: data.stats.total_visits_global || 0,
+          total_account_visits: data.stats.total_account_visits || 0,
+          guest_visits: data.stats.guest_visits || 0,
         });
       }
     } catch (err) {
@@ -99,22 +111,25 @@ export default function AdminDashboardPage() {
             </div>
           </div>
 
-          {/* Card 2: Tổng Lượt Truy Cập */}
+          {/* Card 2: Tổng Lượt Truy Cập Tài Khoản */}
           <div className="bg-white dark:bg-[#0B0F17] rounded-3xl p-5 sm:p-6 border border-slate-200 dark:border-slate-800/80 shadow-sm hover:border-teal-500/30 hover:-translate-y-0.5 hover:shadow-md transition-all flex items-center gap-4">
             <div className="w-13 h-13 sm:w-14 sm:h-14 rounded-2xl bg-teal-50 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-900/50 flex items-center justify-center shrink-0">
               <Activity className="w-6 h-6 sm:w-7 sm:h-7 text-teal-600 dark:text-teal-400" />
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 whitespace-nowrap">
-                Tổng Lượt Truy Cập
+                Lượt Truy Cập Tài Khoản
               </p>
               <h3 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white mt-1 whitespace-nowrap">
                 {loading ? (
                   <RefreshCw className="w-5 h-5 animate-spin text-teal-500 mt-1" />
                 ) : (
-                  `${stats.total_visits_admin.toLocaleString()} lượt`
+                  `${(stats.account_visits || stats.total_visits_admin).toLocaleString()} lượt`
                 )}
               </h3>
+              <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5 truncate" title={`Toàn trang: ${stats.total_visits_global.toLocaleString()} lượt (${stats.total_account_visits.toLocaleString()} thành viên + ${stats.guest_visits.toLocaleString()} khách)`}>
+                Toàn trang: {stats.total_visits_global.toLocaleString()} lượt ({stats.guest_visits.toLocaleString()} khách)
+              </p>
             </div>
           </div>
         </div>

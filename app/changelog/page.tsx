@@ -1,26 +1,19 @@
 "use client";
 
 import React from "react";
-import Link from "next/link";
-import { SMHLogo } from "@/components/brand/SMHLogo";
+import AppLayout from "@/components/layout/AppLayout";
 import { CURRENT_VERSION } from "@/lib/constants/version";
-import { useTheme } from "@/components/theme/ThemeProvider";
 import {
   Sparkles,
-  ArrowLeft,
   Calendar,
   CheckCircle,
   Tag,
   Rocket,
   ShieldCheck,
   Zap,
-  Sun,
-  Moon,
 } from "lucide-react";
 
 export default function ChangelogPage() {
-  const { theme, toggleTheme } = useTheme();
-
   const getCategoryBadge = (category: string) => {
     switch (category) {
       case "Tính Năng Mới":
@@ -49,46 +42,14 @@ export default function ChangelogPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-[#07090E] text-slate-900 dark:text-slate-100 flex flex-col justify-between p-4 sm:p-6 relative overflow-hidden transition-colors duration-300">
-      {/* Subtle background glow */}
-      <div className="absolute top-0 right-1/4 w-[500px] h-[500px] bg-rose-600/10 rounded-full blur-[140px] pointer-events-none" />
-      <div className="absolute bottom-10 left-10 w-[400px] h-[400px] bg-blue-600/5 rounded-full blur-[140px] pointer-events-none" />
-
-      {/* Top Navigation */}
-      <header className="w-full max-w-4xl mx-auto flex items-center justify-between py-4 border-b border-slate-200 dark:border-white/5 relative z-10">
-        <SMHLogo size="md" href="/" />
-
-        <div className="flex items-center gap-2 sm:gap-3">
-          {/* Theme Toggle Button */}
-          <button
-            onClick={toggleTheme}
-            className="flex items-center gap-1.5 p-2 sm:px-3 sm:py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/80 text-slate-700 dark:text-slate-300 hover:text-rose-600 dark:hover:text-rose-400 transition-all shadow-sm"
-            title={`Chuyển sang giao diện ${theme === "dark" ? "Sáng" : "Tối"}`}
-            aria-label="Chuyển đổi giao diện Sáng / Tối"
-          >
-            {theme === "dark" ? (
-              <Sun className="w-4 h-4 text-amber-400" />
-            ) : (
-              <Moon className="w-4 h-4 text-slate-700" />
-            )}
-            <span className="text-xs font-semibold whitespace-nowrap hidden sm:inline">
-              {theme === "dark" ? "Giao diện Tối" : "Giao diện Sáng"}
-            </span>
-          </button>
-
-          <Link
-            href="/"
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold bg-white dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-white/10 transition-colors shadow-sm whitespace-nowrap"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            <span className="hidden sm:inline">Quay lại hệ thống</span>
-            <span className="sm:hidden">Quay lại</span>
-          </Link>
-        </div>
-      </header>
-
-      {/* Main Container */}
-      <main className="w-full max-w-4xl mx-auto my-8 flex-1 relative z-10">
+    <AppLayout
+      pageTitle="Nhật Ký Phiên Bản"
+      breadcrumbs={[
+        { label: "Trang chủ", href: "/" },
+        { label: "Nhật ký phiên bản" },
+      ]}
+    >
+      <div className="w-full max-w-4xl mx-auto py-6 relative z-10 font-sans">
         {/* Page Title */}
         <div className="text-center mb-8 sm:mb-10">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20 mb-3 shadow-sm whitespace-nowrap">
@@ -167,12 +128,7 @@ export default function ChangelogPage() {
             </div>
           </div>
         </div>
-      </main>
-
-      {/* Footer */}
-      <footer className="w-full max-w-4xl mx-auto py-4 border-t border-slate-200 dark:border-white/5 text-center text-xs text-slate-500 dark:text-slate-500 relative z-10">
-        © {new Date().getFullYear()} School MindX Hub (SMH). Phiên bản {CURRENT_VERSION.version} • Mọi quyền được bảo lưu.
-      </footer>
-    </div>
+      </div>
+    </AppLayout>
   );
 }

@@ -6,17 +6,12 @@ import { useRouter } from "next/navigation";
 import {
   ArrowRight,
   ShieldAlert,
-  ShieldCheck,
   Home,
   LogIn,
-  Sparkles,
   Compass,
-  Sun,
-  Moon,
 } from "lucide-react";
 import { API_ROUTES } from "@/lib/constants/api-routes";
-import PublicHeader from "@/components/layout/PublicHeader";
-import SystemFooter from "@/components/layout/SystemFooter";
+import AppLayout from "@/components/layout/AppLayout";
 
 export default function NotFound() {
   const router = useRouter();
@@ -72,16 +67,18 @@ export default function NotFound() {
   }, [countdown, redirectUrl, router]);
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-[#090D16] text-slate-900 dark:text-white flex flex-col justify-between relative overflow-hidden font-sans selection:bg-rose-500 selection:text-white transition-colors duration-300">
-      {/* Background Ambient Glows */}
-      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-96 h-96 bg-rose-600/10 dark:bg-rose-600/15 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute bottom-10 right-10 w-80 h-80 bg-red-800/5 dark:bg-red-800/10 rounded-full blur-3xl pointer-events-none" />
+    <AppLayout
+      pageTitle="Không Tìm Thấy Trang"
+      breadcrumbs={[
+        { label: "Trang chủ", href: "/" },
+        { label: "404 Not Found" },
+      ]}
+    >
+      <div className="flex-1 flex items-center justify-center p-4 sm:p-8 my-auto relative z-10 font-sans">
+        {/* Background Ambient Glows */}
+        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-96 h-96 bg-rose-600/10 dark:bg-rose-600/15 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute bottom-10 right-10 w-80 h-80 bg-red-800/5 dark:bg-red-800/10 rounded-full blur-3xl pointer-events-none" />
 
-      {/* TOP HEADER - ĐỒNG BỘ MỌI GIAO DIỆN */}
-      <PublicHeader />
-
-      {/* MAIN 404 BODY */}
-      <main className="flex-1 flex items-center justify-center p-4 sm:p-6 my-auto relative z-10">
         <div className="max-w-xl w-full text-center relative z-10 animate-fade-in py-8">
           {/* Glowing Badge */}
           <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 text-xs font-semibold mb-6 shadow-sm whitespace-nowrap">
@@ -150,10 +147,7 @@ export default function NotFound() {
             )}
           </div>
         </div>
-      </main>
-
-      {/* FOOTER - ĐỒNG BỘ MỌI GIAO DIỆN */}
-      <SystemFooter />
-    </div>
+      </div>
+    </AppLayout>
   );
 }

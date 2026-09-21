@@ -32,14 +32,18 @@ import {
   AlertTriangle,
   Plus,
   UserPlus,
+  Pencil,
 } from "lucide-react";
 import {
   ManagedClass,
   ManagedClassSlot,
+  LateSubmissionConfig,
   ClassDiffItem,
   calculateDefaultDeadlines,
   formatVnDate,
   formatVnTime,
+  formatVnDateTime,
+  normalizeDeadlineFormat,
 } from "@/lib/types/managed-class";
 import { StudentReviewItem } from "@/lib/types/managed-student";
 import { CentreItem } from "@/lib/constants/centres";
@@ -65,6 +69,10 @@ export default function ClassManagementScreen() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCentre, setSelectedCentre] = useState("all");
   const [selectedStatus, setSelectedStatus] = useState("all");
+  const [selectedTeacher, setSelectedTeacher] = useState("all");
+  const [eligibleTeachers, setEligibleTeachers] = useState<
+    { id: string; fullName: string; lmsCode: string; email: string }[]
+  >([]);
   const [classSortBy, setClassSortBy] = useState("name_asc");
 
   // Phân trang 20 lớp / trang
@@ -72,8 +80,8 @@ export default function ClassManagementScreen() {
   const [classPageInput, setClassPageInput] = useState("1");
   const CLASSES_PER_PAGE = 20;
 
-  // Modal Chi Tiết Lớp Học (Hỗ trợ mode: "add" khi thêm mới, hoặc "view" khi xem/sửa)
-  const [modalMode, setModalMode] = useState<"add" | "view">("view");
+  // Modal Chi Tiết Lớp Học (Hỗ trợ mode: "add" khi thêm mới, "view" khi xem, hoặc "edit" khi chỉnh sửa)
+  const [modalMode, setModalMode] = useState<"add" | "view" | "edit">("view");
   const [modalActiveTab, setModalActiveTab] = useState<"schedule" | "students">("schedule");
   const [activeClass, setActiveClass] = useState<ManagedClass | null>(null);
   const [editedSlots, setEditedSlots] = useState<ManagedClassSlot[]>([]);
@@ -126,6 +134,7 @@ export default function ClassManagementScreen() {
       params.set("type", "managed");
       if (selectedCentre !== "all") params.set("centreId", selectedCentre);
       if (selectedStatus !== "all") params.set("status", selectedStatus);
+      if (selectedTeacher !== "all") params.set("teacher", selectedTeacher);
 
       const res = await fetch(`/api/classes?${params.toString()}`);
       const data = await res.json();
@@ -134,6 +143,7 @@ export default function ClassManagementScreen() {
         const classes = data.classes || [];
         setManagedClasses(classes);
         if (data.userCentres) setUserCentres(data.userCentres);
+        if (Array.isArray(data.eligibleTeachers)) setEligibleTeachers(data.eligibleTeachers);
         // Đồng thời kiểm tra đối chiếu dữ liệu LMS ngầm cho các lớp đã thêm
         if (classes.length > 0) {
           checkLmsChanges(classes);
@@ -157,8 +167,28 @@ export default function ClassManagementScreen() {
     try {
       const res = await fetch(`/api/classes?type=check_lms_changes&ids=${encodeURIComponent(ids)}`);
       const data = await res.json();
-      if (data.success && data.changesMap) {
-        setLmsChangesMap((prev) => ({ ...prev, ...data.changesMap }));
+      if (data.success) {
+        // Nếu có lớp được tự động đồng bộ ngầm (tiến độ, trạng thái, số buổi), cập nhật ngay state
+        if (data.updatedClasses && data.updatedClasses.length > 0) {
+          const updatedMap = new Map<string, any>(data.updatedClasses.map((uc: any) => [uc.id, uc]));
+          setManagedClasses((prev) =>
+            prev.map((c) => (updatedMap.has(c.id) ? { ...c, ...(updatedMap.get(c.id) as object) } : c))
+          );
+        }
+
+        if (data.changesMap) {
+          setLmsChangesMap((prev) => {
+            const next = { ...prev };
+            for (const c of classesToCheck) {
+              if (data.changesMap[c.id]?.hasChanges) {
+                next[c.id] = data.changesMap[c.id];
+              } else {
+                delete next[c.id];
+              }
+            }
+            return next;
+          });
+        }
       }
     } catch (err) {
       console.error("Lỗi kiểm tra đối chiếu LMS ngầm:", err);
@@ -169,12 +199,20 @@ export default function ClassManagementScreen() {
 
   useEffect(() => {
     fetchManagedClasses();
-  }, [selectedCentre, selectedStatus]);
+  }, [selectedCentre, selectedStatus, selectedTeacher]);
 
   // Lọc và sắp xếp danh sách quản lý
   const sortedAndFilteredClasses = useMemo(() => {
     return managedClasses
       .filter((c) => {
+        if (selectedTeacher !== "all") {
+          const matchedT = eligibleTeachers.find((t) => t.id === selectedTeacher);
+          const tCode = (matchedT?.lmsCode || selectedTeacher).toLowerCase();
+          const tName = (matchedT?.fullName || selectedTeacher).toLowerCase();
+          const hasCode = Array.isArray(c.teacherCodes) && c.teacherCodes.some((code) => code && code.toLowerCase() === tCode);
+          const hasName = c.teacherName && (c.teacherName.toLowerCase().includes(tName) || c.teacherName.toLowerCase().includes(tCode));
+          if (!hasCode && !hasName) return false;
+        }
         if (!searchQuery.trim()) return true;
         const q = searchQuery.toLowerCase().trim();
         const nameMatch = c.name?.toLowerCase().includes(q);
@@ -190,7 +228,7 @@ export default function ClassManagementScreen() {
         if (classSortBy === "progress_desc") return (b.progressPercent || 0) - (a.progressPercent || 0);
         return 0;
       });
-  }, [managedClasses, searchQuery, classSortBy]);
+  }, [managedClasses, searchQuery, classSortBy, selectedTeacher, eligibleTeachers]);
 
   const classTotalPages = Math.ceil(sortedAndFilteredClasses.length / CLASSES_PER_PAGE) || 1;
 
@@ -210,6 +248,18 @@ export default function ClassManagementScreen() {
       })),
     ];
   }, [userCentres]);
+
+  // Options cho bộ lọc giáo viên phụ trách (đã approved và đã OAuth Google Drive)
+  const teacherOptions = useMemo(() => {
+    return [
+      { value: "all", label: `Tất cả giáo viên phụ trách (${eligibleTeachers.length})` },
+      ...eligibleTeachers.map((t) => ({
+        value: t.id,
+        label: t.fullName,
+        subLabel: t.lmsCode ? `Mã LMS: ${t.lmsCode}` : undefined,
+      })),
+    ];
+  }, [eligibleTeachers]);
 
   // Options cho bộ lọc trạng thái
   const statusOptions = useMemo(
@@ -419,7 +469,7 @@ export default function ClassManagementScreen() {
       const res = await fetch("/api/classes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ classData: payload }),
+        body: JSON.stringify({ classData: payload, autoSyncStudents: true }),
       });
 
       const data = await res.json();
@@ -526,6 +576,14 @@ export default function ClassManagementScreen() {
       const data = await res.json();
       if (data.success) {
         showToast(data.message || `Đã cập nhật học viên ${reviewItem.fullName}`);
+        if (studentReviewModalClass) {
+          setLmsChangesMap((prev) => {
+            const next = { ...prev };
+            delete next[studentReviewModalClass.id];
+            return next;
+          });
+          checkLmsChanges([studentReviewModalClass]);
+        }
         await openStudentReviewModal(studentReviewModalClass);
         fetchManagedClasses();
       } else {
@@ -572,6 +630,14 @@ export default function ClassManagementScreen() {
       const data = await res.json();
       if (data.success) {
         showToast(data.message || `Đã thêm ${newStudents.length} học viên mới`);
+        if (studentReviewModalClass) {
+          setLmsChangesMap((prev) => {
+            const next = { ...prev };
+            delete next[studentReviewModalClass.id];
+            return next;
+          });
+          checkLmsChanges([studentReviewModalClass]);
+        }
         await openStudentReviewModal(studentReviewModalClass);
         fetchManagedClasses();
       } else {
@@ -618,6 +684,14 @@ export default function ClassManagementScreen() {
       const data = await res.json();
       if (data.success) {
         showToast(data.message || `Đã cập nhật ${changedStudents.length} học viên thay đổi`);
+        if (studentReviewModalClass) {
+          setLmsChangesMap((prev) => {
+            const next = { ...prev };
+            delete next[studentReviewModalClass.id];
+            return next;
+          });
+          checkLmsChanges([studentReviewModalClass]);
+        }
         await openStudentReviewModal(studentReviewModalClass);
         fetchManagedClasses();
       } else {
@@ -670,16 +744,24 @@ export default function ClassManagementScreen() {
       // Ignored
     }
 
-    // Luôn kiểm tra đối chiếu LMS ngay lập tức cho lớp này nếu chưa có diffs trong lmsChangesMap
-    if (!lmsChangesMap[cls.id]?.diffs || lmsChangesMap[cls.id].diffs.length === 0) {
-      try {
-        const syncRes = await fetch(`/api/classes/${cls.id}/sync`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ confirm: false }),
-        });
-        const syncData = await syncRes.json();
-        if (syncData.success && syncData.hasChanges && Array.isArray(syncData.diffs) && syncData.diffs.length > 0) {
+    // Luôn đối chiếu dữ liệu với LMS theo thời gian thực để đảm bảo cảnh báo chính xác tuyệt đối
+    try {
+      const syncRes = await fetch(`/api/classes/${cls.id}/sync`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm: false }),
+      });
+      const syncData = await syncRes.json();
+      if (syncData.success) {
+        if (syncData.autoUpdated && syncData.updatedClass) {
+          setManagedClasses((prev) =>
+            prev.map((c) => (c.id === cls.id ? { ...c, ...syncData.updatedClass } : c))
+          );
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(new Event("smh:notifications_updated"));
+          }
+        }
+        if (syncData.hasChanges && Array.isArray(syncData.diffs) && syncData.diffs.length > 0) {
           setLmsChangesMap((prev) => ({
             ...prev,
             [cls.id]: {
@@ -688,14 +770,258 @@ export default function ClassManagementScreen() {
               diffs: syncData.diffs,
             },
           }));
+        } else {
+          setLmsChangesMap((prev) => {
+            const next = { ...prev };
+            delete next[cls.id];
+            return next;
+          });
         }
-      } catch (e) {
-        // Ignored
       }
+    } catch (e) {
+      // Ignored
     }
   };
 
-  // 6. Lưu thay đổi hạn nộp bài (mode: "view")
+  // 5b. Chỉnh sửa lớp học đã quản lý (mode: "edit")
+  const handleOpenEditModal = async (cls: ManagedClass) => {
+    setActiveClass(cls);
+    setEditedSlots(cls.slots || []);
+    setModalMode("edit");
+    setModalActiveTab("schedule");
+
+    setViewModalStudentDiffMap({});
+    try {
+      const res = await fetch(`/api/students?classId=${encodeURIComponent(cls.id)}`);
+      const data = await res.json();
+      if (data.success && Array.isArray(data.students)) {
+        setActiveClass((prev) => (prev && prev.id === cls.id ? { ...prev, students: data.students } : prev));
+      }
+    } catch (e) {
+      // Ignored
+    }
+
+    // Luôn đối chiếu dữ liệu với LMS theo thời gian thực khi mở chỉnh sửa
+    try {
+      const syncRes = await fetch(`/api/classes/${cls.id}/sync`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm: false }),
+      });
+      const syncData = await syncRes.json();
+      if (syncData.success) {
+        if (syncData.autoUpdated && syncData.updatedClass) {
+          setManagedClasses((prev) =>
+            prev.map((c) => (c.id === cls.id ? { ...c, ...syncData.updatedClass } : c))
+          );
+          setActiveClass((prev) => (prev && prev.id === cls.id ? { ...prev, ...syncData.updatedClass } : prev));
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(new Event("smh:notifications_updated"));
+          }
+        }
+        if (syncData.hasChanges && Array.isArray(syncData.diffs) && syncData.diffs.length > 0) {
+          setLmsChangesMap((prev) => ({
+            ...prev,
+            [cls.id]: {
+              hasChanges: true,
+              diffCount: syncData.diffs.length,
+              diffs: syncData.diffs,
+            },
+          }));
+        } else {
+          setLmsChangesMap((prev) => {
+            const next = { ...prev };
+            delete next[cls.id];
+            return next;
+          });
+        }
+      }
+    } catch (e) {
+      // Ignored
+    }
+  };
+
+  // Helper: Chuyển đổi slot date sang YYYY-MM-DDTHH:mm cho input datetime-local
+  const getSlotDatetimeValue = (slot: ManagedClassSlot): string => {
+    if (slot.deadlineDate) return slot.deadlineDate;
+    if (!slot.date) return "";
+    try {
+      const d = new Date(slot.date);
+      if (isNaN(d.getTime())) return "";
+      let hours = 23;
+      let mins = 59;
+      if (slot.endTime) {
+        if (slot.endTime.includes("T")) {
+          const t = new Date(slot.endTime);
+          if (!isNaN(t.getTime())) {
+            hours = t.getHours();
+            mins = t.getMinutes();
+          }
+        } else if (slot.endTime.includes(":")) {
+          const [h, m] = slot.endTime.split(":");
+          hours = parseInt(h, 10) || 23;
+          mins = parseInt(m, 10) || 59;
+        }
+      }
+      const y = d.getFullYear();
+      const mo = String(d.getMonth() + 1).padStart(2, "0");
+      const da = String(d.getDate()).padStart(2, "0");
+      const hh = String(hours).padStart(2, "0");
+      const mm = String(mins).padStart(2, "0");
+      return `${y}-${mo}-${da}T${hh}:${mm}`;
+    } catch {
+      return "";
+    }
+  };
+
+  // Helper: Chuyển chuỗi datetime-local YYYY-MM-DDTHH:mm sang định dạng giờ VN hiển thị
+  const formatDatetimeToVn = (dtStr?: string | null): string => {
+    if (!dtStr) return "";
+    try {
+      const [dPart, tPart] = dtStr.split("T");
+      if (!dPart) return dtStr;
+      const [y, m, d] = dPart.split("-");
+      const t = tPart ? tPart.slice(0, 5) : "23:59";
+      return `${d}/${m}/${y} ${t}`;
+    } catch {
+      return dtStr || "";
+    }
+  };
+
+  // Helper: Lấy ngày giờ kết thúc tối đa của lớp học cho thuộc tính max của input datetime-local
+  const getClassEndDatetimeMax = (endDateStr?: string | null): string => {
+    if (!endDateStr) return "";
+    try {
+      const d = new Date(endDateStr);
+      if (isNaN(d.getTime())) return "";
+      const y = d.getFullYear();
+      const mo = String(d.getMonth() + 1).padStart(2, "0");
+      const da = String(d.getDate()).padStart(2, "0");
+      return `${y}-${mo}-${da}T23:59`;
+    } catch {
+      return "";
+    }
+  };
+
+  // Cập nhật ngày giờ hạn nộp bài của một slot
+  const handleSlotDeadlineDateChange = (index: number, newDateValue: string) => {
+    setEditedSlots((prev) =>
+      prev.map((s) => {
+        if (s.index !== index) return s;
+        const formatted = newDateValue ? formatDatetimeToVn(newDateValue) : s.submissionDeadline;
+        return {
+          ...s,
+          deadlineDate: newDateValue,
+          submissionDeadline: formatted || s.submissionDeadline,
+        };
+      })
+    );
+  };
+
+  // Bật/tắt nộp trễ cho một slot
+  const handleSlotLateToggle = (index: number, enabled: boolean) => {
+    setEditedSlots((prev) =>
+      prev.map((s) => {
+        if (s.index !== index) return s;
+        const existing = s.lateSubmission || {
+          enabled: false,
+          type: "specific_datetime",
+          specificDateTime: "",
+          duration: { days: 0, hours: 24, minutes: 0, seconds: 0 },
+        };
+        return {
+          ...s,
+          lateSubmission: {
+            ...existing,
+            enabled,
+          },
+        };
+      })
+    );
+  };
+
+  // Đổi kiểu nộp trễ: specific_datetime | duration
+  const handleSlotLateTypeChange = (index: number, type: "specific_datetime" | "duration") => {
+    setEditedSlots((prev) =>
+      prev.map((s) => {
+        if (s.index !== index) return s;
+        const existing = s.lateSubmission || {
+          enabled: true,
+          type: "specific_datetime",
+          specificDateTime: "",
+          duration: { days: 0, hours: 24, minutes: 0, seconds: 0 },
+        };
+        return {
+          ...s,
+          lateSubmission: {
+            ...existing,
+            type,
+          },
+        };
+      })
+    );
+  };
+
+  // Cập nhật ngày giờ cụ thể cho nộp trễ (ràng buộc không vượt quá ngày kết thúc lớp học)
+  const handleSlotLateSpecificDateChange = (index: number, specificDateTime: string, maxEndDate?: string | null) => {
+    const maxLimit = getClassEndDatetimeMax(maxEndDate);
+    let finalVal = specificDateTime;
+    if (maxLimit && specificDateTime > maxLimit) {
+      finalVal = maxLimit;
+      showToast("Thời gian nộp trễ không được vượt quá ngày kết thúc của lớp học", "info");
+    }
+
+    setEditedSlots((prev) =>
+      prev.map((s) => {
+        if (s.index !== index) return s;
+        const existing = s.lateSubmission || {
+          enabled: true,
+          type: "specific_datetime",
+          specificDateTime: "",
+          duration: { days: 0, hours: 24, minutes: 0, seconds: 0 },
+        };
+        return {
+          ...s,
+          lateSubmission: {
+            ...existing,
+            specificDateTime: finalVal,
+          },
+        };
+      })
+    );
+  };
+
+  // Cập nhật khoảng thời gian nộp trễ (ngày, giờ, phút, giây)
+  const handleSlotLateDurationChange = (
+    index: number,
+    field: "days" | "hours" | "minutes" | "seconds",
+    val: number
+  ) => {
+    setEditedSlots((prev) =>
+      prev.map((s) => {
+        if (s.index !== index) return s;
+        const existing = s.lateSubmission || {
+          enabled: true,
+          type: "duration",
+          specificDateTime: "",
+          duration: { days: 0, hours: 0, minutes: 0, seconds: 0 },
+        };
+        const currentDur = existing.duration || { days: 0, hours: 0, minutes: 0, seconds: 0 };
+        return {
+          ...s,
+          lateSubmission: {
+            ...existing,
+            duration: {
+              ...currentDur,
+              [field]: Math.max(0, val || 0),
+            },
+          },
+        };
+      })
+    );
+  };
+
+  // 6. Lưu thay đổi hạn nộp bài (mode: "view" hoặc "edit")
   const handleSaveDeadlineChanges = async () => {
     if (!activeClass) return;
     setSavingClass(true);
@@ -711,6 +1037,7 @@ export default function ClassManagementScreen() {
       if (data.success) {
         showToast("Đã lưu các thay đổi hạn nộp bài thành công");
         setActiveClass((prev) => (prev ? { ...prev, slots: editedSlots } : null));
+        setModalMode("view");
         fetchManagedClasses();
       } else {
         showToast(data.error || "Không thể lưu thay đổi", "error");
@@ -809,8 +1136,9 @@ export default function ClassManagementScreen() {
   };
 
   // 9. Xác nhận đồng bộ dữ liệu thay đổi từ LMS vào Supabase (hỗ trợ đồng bộ mục chọn hoặc tất cả)
-  const handleConfirmSyncLms = async (overrideSelectedKeys?: string[]) => {
-    if (!syncingTargetClass) return;
+  const handleConfirmSyncLms = async (overrideSelectedKeys?: string[], targetClassParam?: ManagedClass | null) => {
+    const target = targetClassParam || syncingTargetClass || activeClass;
+    if (!target) return;
     setConfirmingSync(true);
 
     let keysToSend: string[] | null = null;
@@ -827,7 +1155,7 @@ export default function ClassManagementScreen() {
     }
 
     try {
-      const res = await fetch(`/api/classes/${syncingTargetClass.id}/sync`, {
+      const res = await fetch(`/api/classes/${target.id}/sync`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ confirm: true, selectedKeys: keysToSend }),
@@ -835,15 +1163,15 @@ export default function ClassManagementScreen() {
 
       const data = await res.json();
       if (data.success) {
-        showToast(data.message || `Đã đồng bộ dữ liệu lớp ${syncingTargetClass.name} từ LMS thành công`);
+        showToast(data.message || `Đã đồng bộ dữ liệu lớp ${target.name} từ LMS thành công`);
         setDiffModalOpen(false);
         // Xóa cờ cảnh báo của lớp này sau khi đã cập nhật xong
         setLmsChangesMap((prev) => {
           const next = { ...prev };
-          delete next[syncingTargetClass.id];
+          delete next[target.id];
           return next;
         });
-        const syncedId = syncingTargetClass.id;
+        const syncedId = target.id;
         setSyncingTargetClass(null);
         if (activeClass?.id === syncedId) {
           if (data.updatedClass) {
@@ -860,6 +1188,9 @@ export default function ClassManagementScreen() {
           } catch (e) {
             // Ignored
           }
+        }
+        if (data.updatedClass) {
+          setManagedClasses((prev) => prev.map((c) => (c.id === syncedId ? data.updatedClass : c)));
         }
         fetchManagedClasses();
       } else {
@@ -1001,7 +1332,7 @@ export default function ClassManagementScreen() {
                     setShowDropdown(false);
                   }
                 }}
-                placeholder="Nhập mã lớp học (Ví dụ: LBB-ROB-ARMA12)..."
+                placeholder="Nhập mã lớp học"
                 className="w-full pl-10 pr-4 py-2.5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-rose-500/30"
               />
 
@@ -1108,12 +1439,12 @@ export default function ClassManagementScreen() {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Tìm mã lớp, giáo viên, cơ sở..."
+              placeholder="Tìm kiếm"
               className="w-full pl-10 pr-4 py-2 sm:py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-rose-500/30"
             />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 w-full xl:w-auto">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 w-full xl:w-auto">
             {/* Lọc theo cơ sở trực thuộc (có ô tìm kiếm) */}
             <SearchableDropdown
               value={selectedCentre}
@@ -1123,9 +1454,25 @@ export default function ClassManagementScreen() {
                 setClassPageInput("1");
               }}
               options={centreOptions}
-              placeholder="Chọn cơ sở..."
-              searchPlaceholder="Tìm kiếm cơ sở..."
+              placeholder="Chọn cơ sở"
+              searchPlaceholder="Tìm kiếm cơ sở"
               icon={<Building2 className="w-3.5 h-3.5" />}
+              className="w-full"
+              align="left"
+            />
+
+            {/* Lọc theo giáo viên phụ trách (có ô tìm kiếm) */}
+            <SearchableDropdown
+              value={selectedTeacher}
+              onChange={(val) => {
+                setSelectedTeacher(val);
+                setClassCurrentPage(1);
+                setClassPageInput("1");
+              }}
+              options={teacherOptions}
+              placeholder="Chọn giáo viên"
+              searchPlaceholder="Tìm kiếm giáo viên"
+              icon={<UserCheck className="w-3.5 h-3.5" />}
               className="w-full"
               align="left"
             />
@@ -1139,8 +1486,8 @@ export default function ClassManagementScreen() {
                 setClassPageInput("1");
               }}
               options={statusOptions}
-              placeholder="Chọn trạng thái..."
-              searchPlaceholder="Tìm trạng thái..."
+              placeholder="Chọn trạng thái"
+              searchPlaceholder="Tìm kiếm trạng thái"
               icon={<Filter className="w-3.5 h-3.5" />}
               className="w-full"
               align="left"
@@ -1155,8 +1502,8 @@ export default function ClassManagementScreen() {
                 setClassPageInput("1");
               }}
               options={sortOptions}
-              placeholder="Sắp xếp theo..."
-              searchPlaceholder="Tìm kiểu sắp xếp..."
+              placeholder="Sắp xếp theo"
+              searchPlaceholder="Tìm kiếm sắp xếp"
               icon={<ArrowUpDown className="w-3.5 h-3.5" />}
               className="w-full"
               align="right"
@@ -1293,9 +1640,16 @@ export default function ClassManagementScreen() {
                           <button
                             onClick={() => handleOpenViewModal(cls)}
                             className="p-1.5 rounded-lg text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-                            title="Xem chi tiết & Hạn nộp bài"
+                            title="Xem chi tiết lớp học"
                           >
                             <Eye className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleOpenEditModal(cls)}
+                            className="p-1.5 rounded-lg text-slate-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors cursor-pointer"
+                            title="Chỉnh sửa thông tin & hạn nộp bài"
+                          >
+                            <Pencil className="w-4 h-4" />
                           </button>
                           <button
                             onClick={() => handleCheckSyncLms(cls)}
@@ -1438,9 +1792,15 @@ export default function ClassManagementScreen() {
                         <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-rose-500 text-white">
                           Xác nhận thêm
                         </span>
+                      ) : modalMode === "edit" ? (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-amber-500 text-white flex items-center gap-1">
+                          <Pencil className="w-2.5 h-2.5" />
+                          Chỉnh sửa
+                        </span>
                       ) : (
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                          Đang quản lý
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center gap-1">
+                          <Eye className="w-2.5 h-2.5" />
+                          Chỉ xem
                         </span>
                       )}
                     </h3>
@@ -1449,12 +1809,36 @@ export default function ClassManagementScreen() {
                     </p>
                   </div>
                 </div>
-                <button
-                  onClick={() => setActiveClass(null)}
-                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors cursor-pointer"
-                >
-                  <X className="w-5 h-5" />
-                </button>
+                <div className="flex items-center gap-2">
+                  {modalMode === "view" && (
+                    <button
+                      type="button"
+                      onClick={() => setModalMode("edit")}
+                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold text-rose-600 hover:text-white hover:bg-rose-600 dark:text-rose-400 dark:hover:bg-rose-600 border border-rose-500/30 transition-all cursor-pointer"
+                      title="Chuyển sang chế độ chỉnh sửa"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                      <span>Sửa lớp</span>
+                    </button>
+                  )}
+                  {modalMode === "edit" && (
+                    <button
+                      type="button"
+                      onClick={() => setModalMode("view")}
+                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 transition-all cursor-pointer"
+                      title="Quay lại chế độ xem"
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                      <span>Chế độ xem</span>
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setActiveClass(null)}
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors cursor-pointer"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
               </div>
 
               {/* Thông Tin Tổng Quan (Hàng ngang tinh gọn) */}
@@ -1508,7 +1892,7 @@ export default function ClassManagementScreen() {
                           type="button"
                           onClick={async () => {
                             setSyncingTargetClass(activeClass);
-                            await handleConfirmSyncLms(classChanges.diffs.map((d) => d.field));
+                            await handleConfirmSyncLms(classChanges.diffs.map((d) => d.field), activeClass);
                           }}
                           disabled={confirmingSync}
                           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-sm transition-all cursor-pointer whitespace-nowrap active:scale-95"
@@ -1551,7 +1935,7 @@ export default function ClassManagementScreen() {
                                   type="button"
                                   onClick={async () => {
                                     setSyncingTargetClass(activeClass);
-                                    await handleConfirmSyncLms([diff.field]);
+                                    await handleConfirmSyncLms([diff.field], activeClass);
                                   }}
                                   disabled={confirmingSync}
                                   className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 border border-emerald-500/30 transition-all cursor-pointer whitespace-nowrap"
@@ -1609,25 +1993,28 @@ export default function ClassManagementScreen() {
               {/* TAB 1: Bảng Lịch Trình Chi Tiết Các Buổi Học & Hạn Nộp Bài */}
               {modalActiveTab === "schedule" && (
                 <div className="space-y-2.5">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
                     <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-2">
                       <Calendar className="w-4 h-4 text-rose-500" />
-                      Lịch Trình Chi Tiết & Hạn Nộp Bài ({editedSlots.length} buổi)
+                      Lịch Trình Chi Tiết, Hạn Nộp Bài & Nộp Trễ ({editedSlots.length} buổi)
                     </h4>
                     <span className="text-[11px] text-slate-400">
-                      * Bạn có thể chỉnh sửa trực tiếp ô "Hạn nộp bài" cho từng buổi
+                      {modalMode === "view"
+                        ? "* Bấm nút \"Sửa lớp\" phía trên để điều chỉnh hạn nộp bài & nộp trễ"
+                        : "* Chọn hạn nộp bài qua ô chọn ngày giờ và tùy chỉnh nộp trễ (nếu có)"}
                     </span>
                   </div>
 
-                  <div className="rounded-2xl border border-slate-200 dark:border-slate-800 overflow-x-auto max-h-80 overflow-y-auto scrollbar-thin">
-                    <table className="w-full min-w-[580px] text-left border-collapse text-xs">
-                      <thead className="sticky top-0 bg-slate-100 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 text-[11px] text-slate-500 font-bold uppercase">
+                  <div className="rounded-2xl border border-slate-200 dark:border-slate-800 overflow-x-auto max-h-96 overflow-y-auto scrollbar-thin">
+                    <table className="w-full min-w-[760px] text-left border-collapse text-xs">
+                      <thead className="sticky top-0 bg-slate-100 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 text-[11px] text-slate-500 font-bold uppercase z-10">
                         <tr>
-                          <th className="py-2.5 px-3 text-center w-14">Buổi</th>
+                          <th className="py-2.5 px-3 text-center w-12">Buổi</th>
                           <th className="py-2.5 px-3 text-center w-28">Ngày học</th>
                           <th className="py-2.5 px-3 text-center w-28">Giờ học</th>
-                          <th className="py-2.5 px-3 text-center w-32">Ghi chú mốc</th>
-                          <th className="py-2.5 px-4 min-w-[200px]">Hạn nộp bài (Có thể chỉnh sửa)</th>
+                          <th className="py-2.5 px-3 text-center w-28">Ghi chú mốc</th>
+                          <th className="py-2.5 px-3 min-w-[210px]">Hạn nộp bài</th>
+                          <th className="py-2.5 px-3 min-w-[270px]">Cho phép nộp trễ</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
@@ -1694,29 +2081,188 @@ export default function ClassManagementScreen() {
                                 </td>
                                 <td className="py-2 px-3 text-center">
                                   {isCp1 && (
-                                    <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30 whitespace-nowrap">
+                                    <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30 whitespace-nowrap">
                                       Checkpoint 1
                                     </span>
                                   )}
                                   {isCp2 && (
-                                    <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/30 whitespace-nowrap">
+                                    <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/30 whitespace-nowrap">
                                       Checkpoint 2
                                     </span>
                                   )}
                                   {isFinal && (
-                                    <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/30 whitespace-nowrap">
+                                    <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/30 whitespace-nowrap">
                                       SP Cuối Khóa
                                     </span>
                                   )}
                                 </td>
-                                <td className="py-1.5 px-3">
-                                  <input
-                                    type="text"
-                                    value={slot.submissionDeadline || ""}
-                                    onChange={(e) => handleSlotDeadlineChange(slot.index, e.target.value)}
-                                    placeholder="Nhập hạn nộp bài..."
-                                    className="w-full px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-mono font-medium text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-rose-500"
-                                  />
+                                {/* Hạn nộp bài chính thức (1 ô duy nhất hiển thị Ngày Tháng Năm Giờ Phút kèm nút mở lịch) */}
+                                <td className="py-2 px-3">
+                                  {modalMode === "view" ? (
+                                    <div className="font-mono text-xs font-semibold text-slate-900 dark:text-white px-2.5 py-1 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200/60 dark:border-slate-800 whitespace-nowrap inline-block">
+                                      {normalizeDeadlineFormat(slot.submissionDeadline) || formatDatetimeToVn(getSlotDatetimeValue(slot)) || "Chưa đặt"}
+                                    </div>
+                                  ) : (
+                                    <div className="relative flex items-center min-w-[200px]">
+                                      <input
+                                        type="text"
+                                        readOnly
+                                        value={normalizeDeadlineFormat(slot.submissionDeadline) || formatDatetimeToVn(getSlotDatetimeValue(slot)) || "Chưa đặt"}
+                                        onClick={() => {
+                                          const el = document.getElementById(`deadline_picker_${slot.index}`) as HTMLInputElement;
+                                          if (el) {
+                                            el.showPicker ? el.showPicker() : el.focus();
+                                          }
+                                        }}
+                                        placeholder="Chọn hạn nộp bài"
+                                        className="w-full pl-3 pr-9 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-mono font-bold text-rose-600 dark:text-rose-400 focus:outline-none focus:ring-2 focus:ring-rose-500/30 cursor-pointer shadow-sm"
+                                      />
+                                      <input
+                                        id={`deadline_picker_${slot.index}`}
+                                        type="datetime-local"
+                                        value={getSlotDatetimeValue(slot)}
+                                        onChange={(e) => handleSlotDeadlineDateChange(slot.index, e.target.value)}
+                                        className="sr-only absolute pointer-events-none"
+                                        tabIndex={-1}
+                                      />
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const el = document.getElementById(`deadline_picker_${slot.index}`) as HTMLInputElement;
+                                          if (el) {
+                                            el.showPicker ? el.showPicker() : el.focus();
+                                          }
+                                        }}
+                                        className="absolute right-2 p-1 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition-colors cursor-pointer"
+                                        title="Mở lịch chọn hạn nộp"
+                                      >
+                                        <Calendar className="w-4 h-4" />
+                                      </button>
+                                    </div>
+                                  )}
+                                </td>
+                                {/* Cho phép nộp trễ (Dropdown Select 3 tùy chọn: Tắt / Ngày giờ cụ thể / Khoảng thời gian) */}
+                                <td className="py-2 px-3">
+                                  {modalMode === "view" ? (
+                                    <div>
+                                      {slot.lateSubmission?.enabled ? (
+                                        <div className="space-y-1">
+                                          {slot.lateSubmission.type === "specific_datetime" ? (
+                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-semibold bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/30 whitespace-nowrap">
+                                              <Clock className="w-3 h-3 text-amber-500" />
+                                              <span>Đến: {formatDatetimeToVn(slot.lateSubmission.specificDateTime) || "Chưa đặt"}</span>
+                                            </span>
+                                          ) : (
+                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-semibold bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 whitespace-nowrap">
+                                              <Clock className="w-3 h-3 text-emerald-500" />
+                                              <span>
+                                                +{slot.lateSubmission.duration?.days || 0}d {slot.lateSubmission.duration?.hours || 0}h {slot.lateSubmission.duration?.minutes || 0}m {slot.lateSubmission.duration?.seconds || 0}s
+                                              </span>
+                                            </span>
+                                          )}
+                                        </div>
+                                      ) : (
+                                        <span className="text-xs text-slate-400 italic whitespace-nowrap">Không cho phép</span>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <div className="space-y-1.5 py-1 min-w-[210px]">
+                                      {/* Dropdown Select 3 tùy chọn */}
+                                      <select
+                                        value={
+                                          !slot.lateSubmission?.enabled
+                                            ? "none"
+                                            : slot.lateSubmission.type === "duration"
+                                            ? "duration"
+                                            : "specific_datetime"
+                                        }
+                                        onChange={(e) => {
+                                          const val = e.target.value;
+                                          if (val === "none") {
+                                            handleSlotLateToggle(slot.index, false);
+                                          } else if (val === "specific_datetime") {
+                                            handleSlotLateToggle(slot.index, true);
+                                            handleSlotLateTypeChange(slot.index, "specific_datetime");
+                                          } else if (val === "duration") {
+                                            handleSlotLateToggle(slot.index, true);
+                                            handleSlotLateTypeChange(slot.index, "duration");
+                                          }
+                                        }}
+                                        className="w-full px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-rose-500/30 cursor-pointer"
+                                      >
+                                        <option value="none">Không cho phép (Tắt nộp trễ)</option>
+                                        <option value="specific_datetime">Theo ngày giờ cụ thể</option>
+                                        <option value="duration">Theo khoảng thời gian</option>
+                                      </select>
+
+                                      {/* Khi chọn: Theo ngày giờ cụ thể */}
+                                      {slot.lateSubmission?.enabled && slot.lateSubmission.type !== "duration" && (
+                                        <div className="space-y-1 p-2 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800">
+                                          <input
+                                            type="datetime-local"
+                                            max={getClassEndDatetimeMax(activeClass?.endDate)}
+                                            value={slot.lateSubmission.specificDateTime || ""}
+                                            onChange={(e) => handleSlotLateSpecificDateChange(slot.index, e.target.value, activeClass?.endDate)}
+                                            className="w-full px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-mono font-medium text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-rose-500"
+                                          />
+                                          <div className="text-[10px] text-slate-400">
+                                            * Tối đa: {formatVnDate(activeClass?.endDate) || "Theo ngày kết thúc lớp"}
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {/* Khi chọn: Theo khoảng thời gian */}
+                                      {slot.lateSubmission?.enabled && slot.lateSubmission.type === "duration" && (
+                                        <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800">
+                                          <div className="grid grid-cols-4 gap-1">
+                                            <div>
+                                              <label className="block text-[9px] font-semibold text-slate-500 mb-0.5">Ngày</label>
+                                              <input
+                                                type="number"
+                                                min={0}
+                                                value={slot.lateSubmission.duration?.days ?? 0}
+                                                onChange={(e) => handleSlotLateDurationChange(slot.index, "days", parseInt(e.target.value, 10) || 0)}
+                                                className="w-full px-1.5 py-0.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-mono text-center text-slate-900 dark:text-white focus:ring-1 focus:ring-rose-500"
+                                              />
+                                            </div>
+                                            <div>
+                                              <label className="block text-[9px] font-semibold text-slate-500 mb-0.5">Giờ</label>
+                                              <input
+                                                type="number"
+                                                min={0}
+                                                max={23}
+                                                value={slot.lateSubmission.duration?.hours ?? 0}
+                                                onChange={(e) => handleSlotLateDurationChange(slot.index, "hours", parseInt(e.target.value, 10) || 0)}
+                                                className="w-full px-1.5 py-0.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-mono text-center text-slate-900 dark:text-white focus:ring-1 focus:ring-rose-500"
+                                              />
+                                            </div>
+                                            <div>
+                                              <label className="block text-[9px] font-semibold text-slate-500 mb-0.5">Phút</label>
+                                              <input
+                                                type="number"
+                                                min={0}
+                                                max={59}
+                                                value={slot.lateSubmission.duration?.minutes ?? 0}
+                                                onChange={(e) => handleSlotLateDurationChange(slot.index, "minutes", parseInt(e.target.value, 10) || 0)}
+                                                className="w-full px-1.5 py-0.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-mono text-center text-slate-900 dark:text-white focus:ring-1 focus:ring-rose-500"
+                                              />
+                                            </div>
+                                            <div>
+                                              <label className="block text-[9px] font-semibold text-slate-500 mb-0.5">Giây</label>
+                                              <input
+                                                type="number"
+                                                min={0}
+                                                max={59}
+                                                value={slot.lateSubmission.duration?.seconds ?? 0}
+                                                onChange={(e) => handleSlotLateDurationChange(slot.index, "seconds", parseInt(e.target.value, 10) || 0)}
+                                                className="w-full px-1.5 py-0.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-mono text-center text-slate-900 dark:text-white focus:ring-1 focus:ring-rose-500"
+                                              />
+                                            </div>
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
                                 </td>
                               </tr>
                             );
@@ -1950,22 +2496,44 @@ export default function ClassManagementScreen() {
                           <span>Đồng bộ tất cả dữ liệu LMS</span>
                         </button>
                       )}
-                      <button
-                        type="button"
-                        onClick={() => setActiveClass(null)}
-                        className="px-5 py-2.5 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors cursor-pointer"
-                      >
-                        Đóng
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleSaveDeadlineChanges}
-                        disabled={savingClass}
-                        className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white transition-all shadow-md shadow-rose-600/20 cursor-pointer active:scale-95 whitespace-nowrap"
-                      >
-                        {savingClass ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                        <span>Lưu thay đổi</span>
-                      </button>
+                      {modalMode === "edit" ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => setModalMode("view")}
+                            className="px-5 py-2.5 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors cursor-pointer"
+                          >
+                            Hủy chỉnh sửa
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleSaveDeadlineChanges}
+                            disabled={savingClass}
+                            className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white transition-all shadow-md shadow-rose-600/20 cursor-pointer active:scale-95 whitespace-nowrap"
+                          >
+                            {savingClass ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                            <span>Lưu thay đổi</span>
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => setActiveClass(null)}
+                            className="px-5 py-2.5 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors cursor-pointer"
+                          >
+                            Đóng
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setModalMode("edit")}
+                            className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white transition-all shadow-md shadow-rose-600/20 cursor-pointer active:scale-95 whitespace-nowrap"
+                          >
+                            <Pencil className="w-4 h-4" />
+                            <span>Sửa lớp</span>
+                          </button>
+                        </>
+                      )}
                     </div>
                   </>
                 )}

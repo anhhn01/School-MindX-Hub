@@ -12,6 +12,7 @@ import {
   syncStudentsForClass,
   getStudentsByClassId,
 } from "@/lib/services/managed-students-service";
+import { addSystemNotification } from "@/lib/services/notification-service";
 import { jwtVerify } from "jose";
 
 async function getAuthenticatedUserId(request: NextRequest): Promise<string | null> {
@@ -60,13 +61,19 @@ export async function POST(
     }
 
     // 2. So sánh đối chiếu dữ liệu (kèm số lượng học viên active)
-    const allStudentsMap = await getAllManagedStudentsMap();
+    const allStudentsMap = await getAllManagedStudentsMap(true);
     let currentStudentCount = 0;
     Object.values(allStudentsMap).forEach((st) => {
-      if (st.classId === id && (st.status || "ACTIVE") === "ACTIVE") {
+      if (st.classId === id && (st.status || "ACTIVE").toUpperCase() === "ACTIVE") {
         currentStudentCount++;
       }
     });
+
+    if (currentStudentCount === 0 && Array.isArray(currentClass.students) && currentClass.students.length > 0) {
+      currentStudentCount = currentClass.students.filter(
+        (s: any) => s.activeInClass !== false && (s.status || "ACTIVE").toUpperCase() === "ACTIVE"
+      ).length;
+    }
 
     const comparison = compareClassWithLms(currentClass, freshLms, currentStudentCount);
 
@@ -77,14 +84,19 @@ export async function POST(
       // Body empty
     }
 
-    // 3. Nếu người dùng xác nhận cập nhật
-    if (body.confirm === true) {
+    // 3. QUY TẮC: Khi có thay đổi từ LMS hoặc khi người dùng xác nhận, TỰ ĐỘNG CẬP NHẬT VÀO SUPABASE & TẠO THÔNG BÁO HỆ THỐNG
+    if (comparison.hasChanges || body.confirm === true) {
       const selectedKeys = Array.isArray(body.selectedKeys) ? new Set(body.selectedKeys) : null;
       const shouldUpdate = (field: string) => !selectedKeys || selectedKeys.has(field);
 
       let slots = currentClass.slots;
       // Chỉ tính lại slots nếu có thay đổi số buổi hoặc ngày học
-      if (shouldUpdate("numberOfSessions") || shouldUpdate("startDate") || shouldUpdate("endDate")) {
+      if (
+        shouldUpdate("numberOfSessions") ||
+        shouldUpdate("schedule") ||
+        shouldUpdate("startDate") ||
+        shouldUpdate("endDate")
+      ) {
         const existingDeadlines = new Map<number, string>();
         currentClass.slots?.forEach((s) => {
           if (s.submissionDeadline) {
@@ -99,24 +111,46 @@ export async function POST(
         }));
       }
 
+      const totalSess = shouldUpdate("numberOfSessions")
+        ? freshLms.numberOfSessions
+        : currentClass.numberOfSessions;
+      const cp1 = shouldUpdate("numberOfSessions")
+        ? (freshLms.courseProcess?.checkpoint1Session || currentClass.checkpoint1Session)
+        : currentClass.checkpoint1Session;
+      const cp2 = shouldUpdate("numberOfSessions")
+        ? (freshLms.courseProcess?.checkpoint2Session || currentClass.checkpoint2Session)
+        : currentClass.checkpoint2Session;
+      const finalSess = shouldUpdate("numberOfSessions")
+        ? (freshLms.courseProcess?.finalProjectSession || currentClass.finalProjectSession)
+        : currentClass.finalProjectSession;
+
+      const { calculateRegularSessions } = await import("@/lib/types/managed-class");
+      const regularSessions = calculateRegularSessions(
+        totalSess || (slots?.length || 14),
+        cp1,
+        cp2,
+        finalSess
+      );
+
       const updatedClass: ManagedClass = {
         ...currentClass,
         status: shouldUpdate("status") ? freshLms.status : currentClass.status,
         teacherName: shouldUpdate("teacherName") ? (freshLms.teacherName || currentClass.teacherName) : currentClass.teacherName,
         teacherCodes: shouldUpdate("teacherName") ? (freshLms.teacherCodes || currentClass.teacherCodes) : currentClass.teacherCodes,
         classTime: shouldUpdate("classTime") ? (freshLms.classTime || currentClass.classTime) : currentClass.classTime,
-        startDate: shouldUpdate("startDate") ? (freshLms.startDate || currentClass.startDate) : currentClass.startDate,
-        endDate: shouldUpdate("endDate") ? (freshLms.endDate || currentClass.endDate) : currentClass.endDate,
-        numberOfSessions: shouldUpdate("numberOfSessions") ? freshLms.numberOfSessions : currentClass.numberOfSessions,
+        startDate: shouldUpdate("schedule") || shouldUpdate("startDate") ? (freshLms.startDate || currentClass.startDate) : currentClass.startDate,
+        endDate: shouldUpdate("schedule") || shouldUpdate("endDate") ? (freshLms.endDate || currentClass.endDate) : currentClass.endDate,
+        numberOfSessions: totalSess,
         completedSessions: shouldUpdate("numberOfSessions") || shouldUpdate("progressPercent") ? (freshLms.completedSessions ?? currentClass.completedSessions) : currentClass.completedSessions,
         progressPercent: shouldUpdate("numberOfSessions") || shouldUpdate("progressPercent") ? (freshLms.progressPercent ?? currentClass.progressPercent) : currentClass.progressPercent,
-        checkpoint1Session: shouldUpdate("numberOfSessions") ? (freshLms.courseProcess?.checkpoint1Session || currentClass.checkpoint1Session) : currentClass.checkpoint1Session,
-        checkpoint1Date: shouldUpdate("startDate") || shouldUpdate("endDate") ? (freshLms.courseProcess?.checkpoint1Date || currentClass.checkpoint1Date) : currentClass.checkpoint1Date,
-        checkpoint2Session: shouldUpdate("numberOfSessions") ? (freshLms.courseProcess?.checkpoint2Session || currentClass.checkpoint2Session) : currentClass.checkpoint2Session,
-        checkpoint2Date: shouldUpdate("startDate") || shouldUpdate("endDate") ? (freshLms.courseProcess?.checkpoint2Date || currentClass.checkpoint2Date) : currentClass.checkpoint2Date,
-        finalProjectSession: shouldUpdate("numberOfSessions") ? (freshLms.courseProcess?.finalProjectSession || currentClass.finalProjectSession) : currentClass.finalProjectSession,
-        finalProjectDate: shouldUpdate("startDate") || shouldUpdate("endDate") ? (freshLms.courseProcess?.finalProjectDate || currentClass.finalProjectDate) : currentClass.finalProjectDate,
+        checkpoint1Session: cp1,
+        checkpoint1Date: shouldUpdate("schedule") || shouldUpdate("startDate") || shouldUpdate("endDate") ? (freshLms.courseProcess?.checkpoint1Date || currentClass.checkpoint1Date) : currentClass.checkpoint1Date,
+        checkpoint2Session: cp2,
+        checkpoint2Date: shouldUpdate("schedule") || shouldUpdate("startDate") || shouldUpdate("endDate") ? (freshLms.courseProcess?.checkpoint2Date || currentClass.checkpoint2Date) : currentClass.checkpoint2Date,
+        finalProjectSession: finalSess,
+        finalProjectDate: shouldUpdate("schedule") || shouldUpdate("startDate") || shouldUpdate("endDate") ? (freshLms.courseProcess?.finalProjectDate || currentClass.finalProjectDate) : currentClass.finalProjectDate,
         slots,
+        regularSessions,
         students: shouldUpdate("students") && Array.isArray(freshLms.students) ? freshLms.students : (currentClass.students || []),
         updatedAt: new Date().toISOString(),
       };
@@ -144,21 +178,37 @@ export async function POST(
         }
       }
 
-      const count = selectedKeys ? selectedKeys.size : comparison.diffs.length;
+      // Tạo thông báo chi tiết thay đổi để người dùng theo dõi qua Chuông & Menu
+      const changeDetails = comparison.diffs.map(
+        (d) => `${d.label}: "${d.oldValue || "Trống"}" ➔ "${d.newValue || "Trống"}"`
+      );
+
+      await addSystemNotification({
+        title: `Tự động cập nhật thay đổi LMS: Lớp ${currentClass.name}`,
+        message: `Hệ thống đã tự động đồng bộ ${comparison.diffs.length} thay đổi từ MindX LMS vào cơ sở dữ liệu Supabase.`,
+        details: changeDetails,
+        type: "LMS_SYNC",
+        classId: currentClass.id,
+        link: `/admin/inspection/classes`,
+      });
+
       return NextResponse.json({
         success: true,
-        message: `Đã đồng bộ ${count} mục được chọn từ LMS thành công`,
-        updatedCount: count,
+        autoUpdated: true,
+        message: `Hệ thống đã tự động cập nhật ${comparison.diffs.length} thay đổi từ LMS vào Supabase thành công!`,
+        updatedCount: comparison.diffs.length,
         hasChanges: false,
+        diffs: [],
         updatedClass,
+        lmsClass: freshLms,
       });
     }
 
-    // 4. Nếu chưa xác nhận, trả về diff để Client hiển thị bảng Side-by-Side
+    // 4. Nếu không có thay đổi
     return NextResponse.json({
       success: true,
-      hasChanges: comparison.hasChanges,
-      diffs: comparison.diffs,
+      hasChanges: false,
+      diffs: [],
       currentClass,
       lmsClass: freshLms,
     });

@@ -806,14 +806,50 @@ export async function fetchClassesFromLms({
 
       const totalSessions = c.numberOfSessions || slots.length || 0;
 
-      // Tính số buổi đã hoàn thành
-      let completed = typeof c.completedSessions === "number" ? c.completedSessions : 0;
-      if (completed === 0 && slots.length > 0) {
-        completed = slots.filter((s) => new Date(s.date) <= now).length;
-      }
+      // Tính số buổi đã hoàn thành chuẩn xác
+      let completed = 0;
       if (c.status === "FINISHED") {
         completed = totalSessions;
+      } else if (c.status === "OPEN") {
+        // Lớp chưa khai giảng -> Chưa hoàn thành buổi học nào
+        completed = 0;
+      } else {
+        // Lớp đang học (RUNNING hoặc trạng thái khác)
+        if (slots.length > 0) {
+          completed = slots.filter((s) => {
+            // 1. Buổi học đã có điểm danh giáo viên có mặt
+            const hasAttended =
+              Array.isArray(s.teacherAttendance) &&
+              s.teacherAttendance.some((a: any) => a.status === "ATTENDED");
+            if (hasAttended) return true;
+
+            // 2. Buổi học đã qua thời gian kết thúc (endTime)
+            if (s.endTime) {
+              return new Date(s.endTime) <= now;
+            }
+
+            // 3. Nếu có startTime nhưng không có endTime, ước tính kết thúc sau 2 tiếng
+            if (s.startTime) {
+              const startD = new Date(s.startTime);
+              const endD = new Date(startD.getTime() + 2 * 60 * 60 * 1000);
+              return endD <= now;
+            }
+
+            // 4. Nếu chỉ có date, kiểm tra khi qua ngày học đó (24h)
+            if (s.date) {
+              const d = new Date(s.date);
+              const endOfDay = new Date(d.getTime() + 24 * 60 * 60 * 1000);
+              return endOfDay <= now;
+            }
+
+            return false;
+          }).length;
+        }
+
+        // Đảm bảo không vượt quá tổng số buổi học
+        completed = Math.min(completed, totalSessions);
       }
+
       const progressPercent = totalSessions > 0 ? Math.min(100, Math.round((completed / totalSessions) * 100)) : 0;
 
       // Tính giờ học (classTime) từ scheduleSettings hoặc từ slot đầu tiên
@@ -834,20 +870,44 @@ export async function fetchClassesFromLms({
         }
       }
 
-      // 🎯 Tìm tất cả giáo viên phân công (LEC và TA) của lớp học
-      // Quy chuẩn: Giáo viên phân công là giáo viên có trong lớp học đó với danh nghĩa là LEC hoặc là TA
-      const teacherMap = new Map<string, { fullName: string; code?: string; roleTag: string; count: number }>();
+      // 🎯 Tìm tất cả giáo viên phân công (LEC, TA, Supply) của lớp học
+      // Quy chuẩn: Xác định chính xác vai trò theo LMS (LEC, TA, Supply)
+      const teacherMap = new Map<
+        string,
+        {
+          id: string;
+          fullName: string;
+          code?: string;
+          roleTag: string;
+          assignedRole?: string | null;
+          slotCount: number;
+          attendedCount: number;
+        }
+      >();
 
       const resolveRoleTag = (roleName?: string | null): string => {
         const r = (roleName || "").toLowerCase();
-        if (r.includes("assisstant") || r.includes("assistant") || r.includes("trợ giảng") || r.includes("supporter") || r === "ta") {
+        if (
+          r.includes("assisstant") ||
+          r.includes("assistant") ||
+          r.includes("trợ giảng") ||
+          r.includes("supporter") ||
+          r === "ta"
+        ) {
           return "TA";
         }
-        if (r.includes("lecturer") || r.includes("teacher") || r.includes("giảng viên") || r === "lec") {
+        if (r.includes("supply") || r.includes("dạy thay")) {
+          return "Supply";
+        }
+        if (
+          r.includes("lecturer") ||
+          r.includes("teacher") ||
+          r.includes("giảng viên") ||
+          r === "lec"
+        ) {
           return "LEC";
         }
         if (r.includes("mentor")) return "Mentor";
-        if (r.includes("supply")) return "Supply";
         return roleName ? roleName.trim() : "LEC";
       };
 
@@ -861,7 +921,15 @@ export async function fetchClassesFromLms({
 
           const roleTag = resolveRoleTag(t.role?.name);
           if (!teacherMap.has(id)) {
-            teacherMap.set(id, { fullName, code: code || undefined, roleTag, count: 0 });
+            teacherMap.set(id, {
+              id,
+              fullName,
+              code: code || undefined,
+              roleTag,
+              assignedRole: roleTag,
+              slotCount: 0,
+              attendedCount: 0,
+            });
           }
         }
       }
@@ -876,19 +944,30 @@ export async function fetchClassesFromLms({
 
           const roleTag = resolveRoleTag(t.role?.name);
           if (!teacherMap.has(id)) {
-            teacherMap.set(id, { fullName, code: code || undefined, roleTag, count: 1 });
+            teacherMap.set(id, {
+              id,
+              fullName,
+              code: code || undefined,
+              roleTag,
+              assignedRole: roleTag,
+              slotCount: 1,
+              attendedCount: 0,
+            });
           } else {
             const exist = teacherMap.get(id)!;
-            exist.count += 1;
-            if (roleTag && (!exist.roleTag || exist.roleTag === "LEC")) {
+            exist.slotCount += 1;
+            if (roleTag === "Supply" || (!exist.roleTag && roleTag)) {
               exist.roleTag = roleTag;
             }
           }
         }
       }
 
-      // 3. Quét từ c.slots[].teacherAttendance (Nếu c.teachers & slot.teachers chưa phân bổ trước trên LMS, lấy từ điểm danh thực tế)
+      const slotAttendedList: Array<Set<string>> = [];
+
+      // 3. Quét từ c.slots[].teacherAttendance (Điểm danh thực tế)
       for (const slot of slots) {
+        const attendedInSlot = new Set<string>();
         for (const ta of (slot as any).teacherAttendance || []) {
           if (ta.status === "ATTENDED" && ta.teacher) {
             const fullName = ta.teacher.fullName?.trim();
@@ -896,30 +975,119 @@ export async function fetchClassesFromLms({
             const id = ta.teacher.id || code || fullName;
             if (!id || !fullName) continue;
 
+            attendedInSlot.add(id);
+
             if (!teacherMap.has(id)) {
-              // Nếu lớp đã có Giảng viên chính (LEC), giáo viên điểm danh cùng là TA (Trợ giảng)
-              const hasLecturer = Array.from(teacherMap.values()).some((t) => t.roleTag === "LEC");
-              const defaultTag = hasLecturer ? "TA" : "LEC";
-              teacherMap.set(id, { fullName, code: code || undefined, roleTag: defaultTag, count: 1 });
+              teacherMap.set(id, {
+                id,
+                fullName,
+                code: code || undefined,
+                roleTag: "LEC",
+                assignedRole: null,
+                slotCount: 0,
+                attendedCount: 1,
+              });
             } else {
-              teacherMap.get(id)!.count += 1;
+              teacherMap.get(id)!.attendedCount += 1;
+            }
+          }
+        }
+        if (attendedInSlot.size > 0) {
+          slotAttendedList.push(attendedInSlot);
+        }
+      }
+
+      // 4. Nếu có dữ liệu điểm danh thực tế (attendedCount > 0):
+      // Chuẩn hóa chính xác vai trò theo số buổi đứng lớp thực tế:
+      // - Giáo viên đứng lớp nhiều buổi nhất và chủ đạo -> LEC (Giảng viên chính)
+      // - Giáo viên dạy cùng buổi với Giảng viên chính -> TA (Trợ giảng)
+      // - Giáo viên chỉ dạy thay ở buổi vắng Giảng viên chính -> Supply (Dạy thay)
+      const attendedTeachers = Array.from(teacherMap.values()).filter(
+        (t) => t.attendedCount > 0
+      );
+      if (attendedTeachers.length > 0) {
+        attendedTeachers.sort((a, b) => {
+          if (b.attendedCount !== a.attendedCount) {
+            return b.attendedCount - a.attendedCount;
+          }
+          const aIsLec = a.assignedRole === "LEC" ? 1 : 0;
+          const bIsLec = b.assignedRole === "LEC" ? 1 : 0;
+          if (bIsLec !== aIsLec) return bIsLec - aIsLec;
+          return b.slotCount - a.slotCount;
+        });
+        const maxAttended = attendedTeachers[0];
+
+        // Người dạy nhiều nhất là Giảng viên chính (LEC)
+        maxAttended.roleTag = "LEC";
+
+        for (let i = 1; i < attendedTeachers.length; i++) {
+          const t = attendedTeachers[i];
+          if (t.assignedRole === "TA") {
+            t.roleTag = "TA";
+          } else if (t.assignedRole === "Supply") {
+            t.roleTag = "Supply";
+          } else {
+            // Kiểm tra số buổi dạy cùng với Giảng viên chính (co-attended)
+            // và số buổi dạy một mình khi Giảng viên chính không tham gia (solo-attended)
+            let coAttendedCount = 0;
+            let soloAttendedCount = 0;
+            for (const slotSet of slotAttendedList) {
+              if (slotSet.has(t.id)) {
+                if (slotSet.has(maxAttended.id)) {
+                  coAttendedCount++;
+                } else {
+                  soloAttendedCount++;
+                }
+              }
+            }
+
+            if (coAttendedCount > 0 && coAttendedCount >= soloAttendedCount) {
+              t.roleTag = "TA";
+            } else if (soloAttendedCount > 0) {
+              t.roleTag = "Supply";
+            } else {
+              t.roleTag = t.assignedRole || "TA";
+            }
+          }
+        }
+
+        // Với giáo viên có trong danh sách phân công nhưng thực tế không dạy buổi nào
+        for (const t of teacherMap.values()) {
+          if (t.attendedCount === 0 && attendedTeachers.length > 0) {
+            if (t.assignedRole === "LEC") {
+              t.roleTag = "Supply";
             }
           }
         }
       }
 
-      // 4. Fallback: contactTeacher nếu chưa tìm thấy bất kỳ ai
+      // 5. Fallback: contactTeacher nếu chưa tìm thấy bất kỳ ai
       if (teacherMap.size === 0 && c.contactTeacher?.fullName) {
         const fn = c.contactTeacher.fullName.trim();
-        teacherMap.set(fn, { fullName: fn, code: undefined, roleTag: "LEC", count: 1 });
+        teacherMap.set(fn, {
+          id: fn,
+          fullName: fn,
+          code: undefined,
+          roleTag: "LEC",
+          assignedRole: "LEC",
+          slotCount: 0,
+          attendedCount: 0,
+        });
       }
 
-      const teacherList = Array.from(teacherMap.values());
-      // Sắp xếp: LEC trước, TA sau, sau đó theo số buổi dạy giảm dần
-      teacherList.sort((a, b) => {
-        if (a.roleTag === "LEC" && b.roleTag !== "LEC") return -1;
-        if (a.roleTag !== "LEC" && b.roleTag === "LEC") return 1;
-        return b.count - a.count;
+      // Sắp xếp thứ tự ưu tiên: LEC -> TA -> Supply -> Mentor
+      const rolePriority: Record<string, number> = {
+        LEC: 1,
+        TA: 2,
+        Supply: 3,
+        Mentor: 4,
+      };
+
+      const teacherList = Array.from(teacherMap.values()).sort((a, b) => {
+        const pA = rolePriority[a.roleTag] || 99;
+        const pB = rolePriority[b.roleTag] || 99;
+        if (pA !== pB) return pA - pB;
+        return b.attendedCount - a.attendedCount;
       });
 
       let teacherName = "";

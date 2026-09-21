@@ -23,6 +23,8 @@ import {
   KeyRound,
   Users,
   Link2Off,
+  HardDrive,
+  UploadCloud,
 } from "lucide-react";
 import { API_ROUTES, getRoleSlug } from "@/lib/constants/api-routes";
 import { getRolePoints } from "@/lib/constants/roles";
@@ -40,6 +42,8 @@ interface User {
   status_display_name?: string;
   role: string; // Joined text string ("Admin", "Teacher Full-time", "Teacher Part-time")
   role_points?: number; // 1: Admin (cao nhất), 2: Teacher Full-time, 3: Teacher Part-time (thấp nhất)
+  max_submission_quota_mb?: number;
+  default_student_quota_mb?: number;
 }
 
 export default function UserManagementScreen() {
@@ -57,6 +61,9 @@ export default function UserManagementScreen() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [viewingUser, setViewingUser] = useState<User | null>(null);
   const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [quotaModalUser, setQuotaModalUser] = useState<User | null>(null);
+  const [maxQuotaInput, setMaxQuotaInput] = useState<number>(100);
+  const [isSavingQuota, setIsSavingQuota] = useState(false);
   const [pendingAdminTarget, setPendingAdminTarget] = useState<{
     type: "create" | "update";
     userId?: string;
@@ -475,6 +482,29 @@ export default function UserManagementScreen() {
     return "bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-800";
   };
 
+  const handleSaveTeacherMaxQuota = async () => {
+    if (!quotaModalUser) return;
+    setIsSavingQuota(true);
+    try {
+      const res = await fetch(`/api/admin/users/${quotaModalUser.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ max_submission_quota_mb: maxQuotaInput }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Không thể cập nhật hạn mức nộp tối đa");
+      showToast(
+        `Đã cập nhật hạn mức nộp tối đa ${maxQuotaInput} MB cho giáo viên "${quotaModalUser.full_name}" thành công!`
+      );
+      setQuotaModalUser(null);
+      fetchUsers();
+    } catch (err: any) {
+      showToast(err.message || "Lỗi cập nhật hạn mức", "error");
+    } finally {
+      setIsSavingQuota(false);
+    }
+  };
+
   const roleSlug = getRoleSlug(currentUserRole);
 
   return (
@@ -538,7 +568,7 @@ export default function UserManagementScreen() {
             <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
             <input
               type="text"
-              placeholder="Tìm kiếm theo họ tên hoặc mã LMS..."
+              placeholder="Tìm kiếm"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-9 pr-4 py-2.5 bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 rounded-xl text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-rose-500/30 transition-all"
@@ -740,6 +770,19 @@ export default function UserManagementScreen() {
                               <Eye className="w-4 h-4" />
                             </button>
 
+                            {currentUserRolePoints === 1 && user.role.toLowerCase().includes("part-time") && (
+                              <button
+                                onClick={() => {
+                                  setQuotaModalUser(user);
+                                  setMaxQuotaInput(user.max_submission_quota_mb || 100);
+                                }}
+                                className="p-1.5 rounded-lg text-indigo-500 hover:text-indigo-700 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 transition-colors cursor-pointer"
+                                title="Cấu hình hạn mức nộp tối đa (Admin)"
+                              >
+                                <HardDrive className="w-4 h-4" />
+                              </button>
+                            )}
+
                             {user.email && (
                               <button
                                 onClick={() => handleUnlinkGoogle(user)}
@@ -800,7 +843,7 @@ export default function UserManagementScreen() {
                     <input
                       type="text"
                       autoComplete="off"
-                      placeholder="Nhập thông tin mã LMS"
+                      placeholder="Nhập mã LMS"
                       value={addForm.lms_code}
                       onChange={(e) => setAddForm((prev) => ({ ...prev, lms_code: e.target.value }))}
                       className="flex-1 px-3.5 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-rose-500/30"
@@ -837,7 +880,7 @@ export default function UserManagementScreen() {
                   <input
                     type="text"
                     autoComplete="off"
-                    placeholder="Họ và tên người dùng"
+                    placeholder="Nhập họ và tên"
                     value={addForm.full_name}
                     readOnly={addForm.is_firebase && addFeedback?.hasLmsFullname === true}
                     onChange={(e) => setAddForm((prev) => ({ ...prev, full_name: e.target.value }))}
@@ -856,7 +899,7 @@ export default function UserManagementScreen() {
                       <input
                         type={showPassword ? "text" : "password"}
                         autoComplete="new-password"
-                        placeholder="Mật khẩu tài khoản cục bộ"
+                        placeholder="Nhập mật khẩu"
                         value={addForm.password}
                         onChange={(e) => setAddForm((prev) => ({ ...prev, password: e.target.value }))}
                         className="w-full pl-3.5 pr-9 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-rose-500/30"
@@ -975,6 +1018,37 @@ export default function UserManagementScreen() {
                     )}
                   </div>
                 </div>
+                {viewingUser.role.toLowerCase().includes("part-time") && (
+                  <>
+                    <div className="flex justify-between py-1.5 border-b border-slate-100 dark:border-slate-800">
+                      <span className="text-slate-500 dark:text-slate-400">Định Mức Nộp Mặc Định:</span>
+                      <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">
+                        {viewingUser.default_student_quota_mb || 50} MB / học viên
+                      </span>
+                    </div>
+                    <div className="flex justify-between py-1.5 border-b border-slate-100 dark:border-slate-800 items-center">
+                      <span className="text-slate-500 dark:text-slate-400">Hạn Mức Nộp Tối Đa (Admin):</span>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-bold text-rose-600 dark:text-rose-400">
+                          {viewingUser.max_submission_quota_mb || 100} MB
+                        </span>
+                        {currentUserRolePoints === 1 && (
+                          <button
+                            onClick={() => {
+                              const u = viewingUser;
+                              setViewingUser(null);
+                              setQuotaModalUser(u);
+                              setMaxQuotaInput(u.max_submission_quota_mb || 100);
+                            }}
+                            className="px-2 py-0.5 rounded-lg text-[11px] font-semibold bg-indigo-50 text-indigo-600 dark:bg-indigo-950/50 dark:text-indigo-400 border border-indigo-200/60 dark:border-indigo-800/60 hover:bg-indigo-100 cursor-pointer"
+                          >
+                            Chỉnh sửa
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
                 <div className="flex justify-between py-1.5">
                   <span className="text-slate-500 dark:text-slate-400">Ngày Tạo:</span>
                   <span className="text-slate-900 dark:text-white font-mono">{new Date(viewingUser.created_at).toLocaleString("vi-VN")}</span>
@@ -987,6 +1061,72 @@ export default function UserManagementScreen() {
                   className="px-5 py-2.5 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors"
                 >
                   Đóng
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal Cấu Hình Hạn Mức Nộp Tối Đa Của Học Viên (Dành Cho Admin) */}
+        {quotaModalUser && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm">
+            <div className="bg-white dark:bg-[#0B0F17] rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl w-full max-w-md p-5 sm:p-6 space-y-4 animate-in fade-in zoom-in-95 duration-200">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+                <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <HardDrive className="w-4 h-4 text-indigo-500" />
+                  <span>Hạn Mức Nộp Tối Đa (Admin)</span>
+                </h3>
+                <button
+                  onClick={() => setQuotaModalUser(null)}
+                  className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="space-y-3 text-xs">
+                <p className="text-slate-500 dark:text-slate-400">
+                  Chỉ định hạn mức dung lượng tối đa mà giáo viên Part-time <strong className="text-slate-800 dark:text-slate-100 font-bold">"{quotaModalUser.full_name}"</strong> có thể thiết lập cho học viên.
+                </p>
+
+                <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-slate-700 dark:text-slate-300">Hạn mức tối đa cho phép:</span>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min={10}
+                        max={500}
+                        value={maxQuotaInput}
+                        onChange={(e) => setMaxQuotaInput(Math.max(5, Math.min(500, Number(e.target.value) || 5)))}
+                        className="w-24 px-3 py-1.5 text-center font-mono font-bold text-sm bg-white dark:bg-[#0B0F17] border border-slate-200 dark:border-slate-800 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                      />
+                      <span className="font-bold text-slate-500">MB</span>
+                    </div>
+                  </div>
+                  <div className="flex justify-between text-[10px] text-slate-400">
+                    <span>Tối thiểu: 10 MB</span>
+                    <span>Mặc định: 100 MB</span>
+                    <span>Tối đa: 500 MB</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  onClick={() => setQuotaModalUser(null)}
+                  disabled={isSavingQuota}
+                  className="px-4 py-2.5 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors"
+                >
+                  Hủy bỏ
+                </button>
+                <button
+                  onClick={handleSaveTeacherMaxQuota}
+                  disabled={isSavingQuota}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white transition-all shadow-md shadow-indigo-600/20 disabled:opacity-50 cursor-pointer"
+                >
+                  {isSavingQuota ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <ShieldCheck className="w-3.5 h-3.5" />}
+                  <span>{isSavingQuota ? "Đang lưu..." : "Cập Nhật Hạn Mức"}</span>
                 </button>
               </div>
             </div>

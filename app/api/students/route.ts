@@ -9,7 +9,9 @@ import {
   reviewStudentsForClass,
   addSingleStudentToManaged,
   syncSingleStudentFromLms,
+  reconcileStudentsWithClasses,
 } from "@/lib/services/managed-students-service";
+import { normalizeTeacherName, ManagedStudent } from "@/lib/types/managed-student";
 import { getAllManagedClassesMap } from "@/lib/services/managed-classes-service";
 import { createClient } from "@supabase/supabase-js";
 import { jwtVerify } from "jose";
@@ -97,6 +99,9 @@ export async function GET(request: NextRequest) {
       });
     }
 
+    // Tự động đồng bộ giáo viên phụ trách và lớp học của toàn bộ học viên theo dữ liệu lớp học mới nhất
+    await reconcileStudentsWithClasses();
+
     const userCentreIds = new Set(userCentres.map((c) => c.id));
     let students = await getManagedStudents({
       centreId: centreId !== "all" ? centreId : undefined,
@@ -108,36 +113,84 @@ export async function GET(request: NextRequest) {
     // Lọc theo cơ sở trực thuộc
     students = students.filter((s) => userCentreIds.has(s.centreId));
 
-    // Nếu là Teacher Part-time: chỉ xem học viên thuộc các lớp do mình giảng dạy
+    // Phân quyền theo giáo viên: Admin xem toàn bộ trong cơ sở; Giáo viên chỉ xem học viên thuộc lớp mình đang phụ trách
     const isAdmin = currentUserRole === "Admin" || currentUserRole === "Super Admin";
-    const isTeacherFullTime = currentUserRole === "Teacher Full-time";
 
-    if (!isAdmin && !isTeacherFullTime) {
+    if (!isAdmin) {
       const classesMap = await getAllManagedClassesMap();
       const userLmsCode = (authUser.lmsCode || "").trim().toLowerCase();
-      const userFullName = (authUser.fullName || "").trim().toLowerCase();
+      const userFullName = authUser.fullName || "";
+      const userNorm = normalizeTeacherName(userFullName);
+      const userId = authUser.id;
 
-      const taughtClassIds = new Set<string>();
-      for (const cls of Object.values(classesMap)) {
-        let isTeacherOfClass = false;
-        if (Array.isArray(cls.teacherCodes)) {
-          for (const code of cls.teacherCodes) {
-            if (userLmsCode && code.trim().toLowerCase() === userLmsCode) isTeacherOfClass = true;
+      students = students.filter((s) => {
+        // A. Kiểm tra theo lớp học hiện tại trong classesMap
+        const currentClass = s.classId ? classesMap[s.classId] : null;
+
+        if (currentClass) {
+          // 1. Khớp mã LMS giáo viên trong teacherCodes của lớp
+          if (Array.isArray(currentClass.teacherCodes)) {
+            for (const code of currentClass.teacherCodes) {
+              const cNorm = code.trim().toLowerCase();
+              if (userLmsCode && cNorm === userLmsCode) return true;
+              if (userLmsCode && (cNorm.includes(userLmsCode) || userLmsCode.includes(cNorm))) return true;
+            }
+          }
+
+          // 2. Khớp họ và tên giáo viên trong teacherName của lớp (chuẩn hóa không phân biệt LEC/TA hay tiền tố TF/GV)
+          if (currentClass.teacherName) {
+            const names = currentClass.teacherName.split(",").map((n) => normalizeTeacherName(n));
+            for (const n of names) {
+              if (userNorm && n === userNorm) return true;
+            }
+          }
+
+          // 3. Khớp addedBy của lớp
+          if (
+            currentClass.addedBy &&
+            (currentClass.addedBy === userId || currentClass.addedBy.toLowerCase() === userLmsCode)
+          ) {
+            return true;
+          }
+
+          // Đã xác định được lớp hiện tại nhưng Thầy Cô này KHÔNG phụ trách lớp này
+          // -> Trả về false (học viên chuyển qua lớp Thầy khác thì Thầy cũ không coi được nữa)
+          return false;
+        }
+
+        // B. Nếu lớp học hiện tại KHÔNG xác định được:
+        // -> Giữ nguyên giáo viên phụ trách cuối cùng (lastTeacherName / lastTeacherCodes) để Thầy cuối cùng vẫn xem được
+        if (Array.isArray(s.lastTeacherCodes)) {
+          for (const code of s.lastTeacherCodes) {
+            const cNorm = code.trim().toLowerCase();
+            if (userLmsCode && cNorm === userLmsCode) return true;
+            if (userLmsCode && (cNorm.includes(userLmsCode) || userLmsCode.includes(cNorm))) return true;
           }
         }
-        if (!isTeacherOfClass && cls.teacherName) {
-          const names = cls.teacherName.split(",").map((n) => n.trim().toLowerCase());
+        if (s.lastTeacherName) {
+          const names = s.lastTeacherName.split(",").map((n) => normalizeTeacherName(n));
           for (const n of names) {
-            if (userFullName && n === userFullName) isTeacherOfClass = true;
-            if (userLmsCode && n === userLmsCode) isTeacherOfClass = true;
+            if (userNorm && n === userNorm) return true;
           }
         }
-        if (isTeacherOfClass) {
-          taughtClassIds.add(cls.id);
-        }
-      }
 
-      students = students.filter((s) => taughtClassIds.has(s.classId));
+        // C. Fallback theo teacherName / teacherCodes đã lưu trên học viên
+        if (Array.isArray(s.teacherCodes)) {
+          for (const code of s.teacherCodes) {
+            const cNorm = code.trim().toLowerCase();
+            if (userLmsCode && cNorm === userLmsCode) return true;
+            if (userLmsCode && (cNorm.includes(userLmsCode) || userLmsCode.includes(cNorm))) return true;
+          }
+        }
+        if (s.teacherName) {
+          const names = s.teacherName.split(",").map((n) => normalizeTeacherName(n));
+          for (const n of names) {
+            if (userNorm && n === userNorm) return true;
+          }
+        }
+
+        return false;
+      });
     }
 
     return NextResponse.json({

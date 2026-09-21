@@ -25,7 +25,7 @@
     "screen_permission_management": false,
     "user_centre_management": false,
     "class_management": true,
-    "student_management": false,
+    "student_management": true,
     "data_inspection": false,
     "trial_schedules": false
   }

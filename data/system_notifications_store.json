@@ -1,0 +1,16 @@
+[
+  {
+    "id": "notif_1789979763489_0yoiq",
+    "link": "/admin/inspection/trial_schedules",
+    "type": "TELEGRAM_REMINDER",
+    "title": "Gửi thử thông báo Lịch trải nghiệm Telegram thành công",
+    "isRead": true,
+    "details": [
+      "Ngày trải nghiệm: 22/09/2026",
+      "Tổng số ca gửi: 13 ca",
+      "Chế độ: Gửi thử nghiệm (Test mode)"
+    ],
+    "message": "Đã gửi lịch trải nghiệm ngày 22/09/2026 (13 ca) tới nhóm Telegram đã cấu hình.",
+    "timestamp": "2026-09-21T08:36:03.489Z"
+  }
+]

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { recordVisit } from "@/lib/services/site-stats-service";
+import { jwtVerify } from "jose";
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -12,92 +14,65 @@ const supabase = createClient(supabaseUrl, supabaseServiceRoleKey, {
   auth: { autoRefreshToken: false, persistSession: false },
 });
 
-import fs from "fs";
-import path from "path";
-
-const STATS_FILE = path.join(process.cwd(), "data", "site_stats.json");
-
-// Cache in-memory lượt truy cập và tăng mỗi khi được gọi
-let globalVisits = 1420;
-const roleVisits: Record<string, number> = {
-  Admin: 852,
-  "Teacher Full-time": 346,
-  "Teacher Part-time": 222,
-};
-
-function loadStoredStats() {
-  try {
-    if (fs.existsSync(STATS_FILE)) {
-      const raw = fs.readFileSync(STATS_FILE, "utf-8");
-      const parsed = JSON.parse(raw);
-      if (typeof parsed.globalVisits === "number") {
-        globalVisits = parsed.globalVisits;
-      }
-      if (parsed.roleVisits && typeof parsed.roleVisits === "object") {
-        Object.assign(roleVisits, parsed.roleVisits);
+async function getAuthenticatedUserId(request: NextRequest): Promise<string | null> {
+  let currentUserId = request.cookies.get("user_id")?.value;
+  if (!currentUserId) {
+    const smhToken = request.cookies.get("smh_token")?.value;
+    if (smhToken) {
+      try {
+        const secret = new TextEncoder().encode(process.env.JWT_SECRET || "student-mindx-hub");
+        const { payload } = await jwtVerify(smhToken, secret);
+        currentUserId = (payload.userId || payload.sub || payload.id) as string;
+      } catch (e) {
+        // Token invalid
       }
     }
-  } catch (e) {
-    console.warn("Lỗi đọc site_stats.json:", e);
   }
+  return currentUserId || null;
 }
-
-function saveStoredStats() {
-  try {
-    const dir = path.dirname(STATS_FILE);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(
-      STATS_FILE,
-      JSON.stringify({ globalVisits, roleVisits, updatedAt: new Date().toISOString() }),
-      "utf-8"
-    );
-  } catch (e) {
-    console.warn("Lỗi ghi site_stats.json:", e);
-  }
-}
-
-// Khởi động đọc từ disk
-loadStoredStats();
 
 export async function GET(request: NextRequest) {
   try {
+    const currentUserId = await getAuthenticatedUserId(request);
     const rawRole = request.cookies.get("user_role")?.value;
-    const userRole = rawRole ? decodeURIComponent(rawRole) : "Admin";
+    const userRole = rawRole ? decodeURIComponent(rawRole) : null;
 
-    // Tăng lượt truy cập cho hệ thống và lưu trữ bền vững
-    globalVisits += 1;
-    if (roleVisits[userRole] !== undefined) {
-      roleVisits[userRole] += 1;
-    } else {
-      roleVisits[userRole] = 1;
-    }
-    saveStoredStats();
+    // Ghi nhận lượt truy cập (nếu có userId -> tài khoản, không có -> khách)
+    // Tự động lưu trữ bền vững vào Supabase system_settings (key = 'site_stats')
+    const visitData = await recordVisit(currentUserId, userRole);
 
     // Lấy tổng số tài khoản thực tế từ Supabase
     const { count: totalUsers, error: countError } = await supabase
       .from("users")
       .select("*", { count: "exact", head: true });
 
-    const totalAccounts = countError ? 0 : (totalUsers || 0);
+    const totalAccounts = countError ? 0 : totalUsers || 0;
 
     return NextResponse.json({
       success: true,
       stats: {
-        // Admin
+        // Tổng số tài khoản
         total_accounts: totalAccounts,
-        total_visits_admin: roleVisits["Admin"] || globalVisits,
 
-        // Teacher Full-time
-        total_visits_fulltime: roleVisits["Teacher Full-time"] || 346,
+        // Lượt truy cập riêng của tài khoản đang đăng nhập
+        account_visits: visitData.currentAccountVisits,
 
-        // Teacher Part-time
+        // Lượt truy cập của khách
+        guest_visits: visitData.guestVisits,
+
+        // Tổng lượt truy cập của toàn bộ tài khoản
+        total_account_visits: visitData.totalAccountVisits,
+
+        // Tổng lượt truy cập toàn trang = Tất cả account + Khách
+        total_visits_global: visitData.totalVisitsGlobal,
+
+        // Tương thích ngược theo vai trò
+        total_visits_admin: visitData.roleVisits["Admin"] || visitData.totalVisitsGlobal,
+        total_visits_fulltime: visitData.roleVisits["Teacher Full-time"] || 346,
         total_classes_parttime: 4,
         total_students_parttime: 68,
         total_submissions_parttime: 152,
-        total_visits_parttime: roleVisits["Teacher Part-time"] || 222,
-
-        // Global
-        total_visits_global: globalVisits,
+        total_visits_parttime: visitData.roleVisits["Teacher Part-time"] || 222,
       },
     });
   } catch (error: any) {

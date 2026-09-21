@@ -16,7 +16,9 @@ import {
   getStudentsByClassId,
   getAllManagedStudentsMap,
 } from "@/lib/services/managed-students-service";
+import { addSystemNotification } from "@/lib/services/notification-service";
 import { generateStudentCode } from "@/lib/types/managed-student";
+import { hasGoogleDriveConnected } from "@/lib/services/google-drive-service";
 import { createClient } from "@supabase/supabase-js";
 import { jwtVerify } from "jose";
 
@@ -231,36 +233,153 @@ export async function GET(request: NextRequest) {
       const freshLmsMap = new Map(freshLmsList.map((c) => [c.id, c]));
 
       // 2. Lấy số lượng học viên active hiện có trong Supabase của các lớp này
-      const allStudentsMap = await getAllManagedStudentsMap();
+      const allStudentsMap = await getAllManagedStudentsMap(true);
       const supabaseClassStudentCount: Record<string, number> = {};
       Object.values(allStudentsMap).forEach((st) => {
-        if (st.classId && (st.status || "ACTIVE") === "ACTIVE") {
+        if (st.classId && (st.status || "ACTIVE").toUpperCase() === "ACTIVE") {
           supabaseClassStudentCount[st.classId] = (supabaseClassStudentCount[st.classId] || 0) + 1;
         }
       });
 
       // 3. Đối chiếu so sánh từng lớp
       const changesMap: Record<string, { hasChanges: boolean; diffCount: number; diffs: any[] }> = {};
+      const updatedClasses: ManagedClass[] = [];
 
       for (const curClass of targetClasses) {
         const freshLms = freshLmsMap.get(curClass.id);
         if (!freshLms) continue;
 
-        const currentStudentCount = supabaseClassStudentCount[curClass.id] || 0;
+        let currentStudentCount = supabaseClassStudentCount[curClass.id] || 0;
+        if (currentStudentCount === 0 && Array.isArray(curClass.students) && curClass.students.length > 0) {
+          currentStudentCount = curClass.students.filter(
+            (s: any) => s.activeInClass !== false && (s.status || "ACTIVE").toUpperCase() === "ACTIVE"
+          ).length;
+        }
+
         const diffResult = compareClassWithLms(curClass, freshLms, currentStudentCount);
 
         if (diffResult.hasChanges) {
-          changesMap[curClass.id] = {
-            hasChanges: true,
-            diffCount: diffResult.diffs.length,
-            diffs: diffResult.diffs,
-          };
+          // TỰ ĐỘNG CẬP NHẬT TẤT CẢ DỮ LIỆU THAY ĐỔI TỪ LMS VÀO SUPABASE
+          const autoSyncData: any = {};
+          const changeDetails: string[] = [];
+
+          diffResult.diffs.forEach((d) => {
+            changeDetails.push(`${d.label}: ${d.oldValue} -> ${d.newValue}`);
+          });
+
+          // 1. Cập nhật các trường thông tin của lớp
+          if (freshLms.status && curClass.status !== freshLms.status) {
+            autoSyncData.status = freshLms.status;
+            curClass.status = freshLms.status;
+          }
+          if (freshLms.numberOfSessions && curClass.numberOfSessions !== freshLms.numberOfSessions) {
+            autoSyncData.numberOfSessions = freshLms.numberOfSessions;
+            curClass.numberOfSessions = freshLms.numberOfSessions;
+          }
+          if (
+            freshLms.completedSessions !== undefined &&
+            (curClass.completedSessions !== freshLms.completedSessions ||
+              curClass.progressPercent !== freshLms.progressPercent)
+          ) {
+            autoSyncData.completedSessions = freshLms.completedSessions;
+            autoSyncData.progressPercent = freshLms.progressPercent || 0;
+            curClass.completedSessions = freshLms.completedSessions;
+            curClass.progressPercent = freshLms.progressPercent || 0;
+          }
+          if (freshLms.teacherName && curClass.teacherName !== freshLms.teacherName) {
+            autoSyncData.teacherName = freshLms.teacherName;
+            autoSyncData.teacherCodes = freshLms.teacherCodes || [];
+            curClass.teacherName = freshLms.teacherName;
+            curClass.teacherCodes = freshLms.teacherCodes || [];
+          }
+          if (freshLms.classTime && curClass.classTime !== freshLms.classTime) {
+            autoSyncData.classTime = freshLms.classTime;
+            curClass.classTime = freshLms.classTime;
+          }
+          if (freshLms.startDate && curClass.startDate !== freshLms.startDate) {
+            autoSyncData.startDate = freshLms.startDate;
+            curClass.startDate = freshLms.startDate;
+          }
+          if (freshLms.endDate && curClass.endDate !== freshLms.endDate) {
+            autoSyncData.endDate = freshLms.endDate;
+            curClass.endDate = freshLms.endDate;
+          }
+
+          // Checkpoints
+          const cp1 = freshLms.checkpoint1Session ?? freshLms.courseProcess?.checkpoint1Session;
+          if (cp1 !== undefined && curClass.checkpoint1Session !== cp1) {
+            autoSyncData.checkpoint1Session = cp1;
+            curClass.checkpoint1Session = cp1;
+          }
+          const cp2 = freshLms.checkpoint2Session ?? freshLms.courseProcess?.checkpoint2Session;
+          if (cp2 !== undefined && curClass.checkpoint2Session !== cp2) {
+            autoSyncData.checkpoint2Session = cp2;
+            curClass.checkpoint2Session = cp2;
+          }
+          const finalSess = freshLms.finalProjectSession ?? freshLms.courseProcess?.finalProjectSession;
+          if (finalSess !== undefined && curClass.finalProjectSession !== finalSess) {
+            autoSyncData.finalProjectSession = finalSess;
+            curClass.finalProjectSession = finalSess;
+          }
+
+          // Cập nhật slots nếu có slots mới từ LMS
+          if (Array.isArray(freshLms.slots) && freshLms.slots.length > 0) {
+            const oldDeadlines = new Map<number, string>();
+            curClass.slots?.forEach((s) => {
+              if (s.submissionDeadline) oldDeadlines.set(s.index, s.submissionDeadline);
+            });
+            const defaultSlots = calculateDefaultDeadlines(freshLms);
+            autoSyncData.slots = defaultSlots.map((s) => ({
+              ...s,
+              submissionDeadline: oldDeadlines.get(s.index) || s.submissionDeadline,
+            }));
+            curClass.slots = autoSyncData.slots;
+          }
+
+          // 2. Đồng bộ học viên nếu có thay đổi hoặc có học viên mới
+          if (Array.isArray(freshLms.students) && freshLms.students.length > 0) {
+            try {
+              await syncStudentsForClass(
+                {
+                  id: curClass.id,
+                  name: curClass.name,
+                  courseName: curClass.courseName,
+                  centreId: curClass.centreId,
+                  centreName: curClass.centreName,
+                },
+                freshLms.students,
+                "lms-auto-sync"
+              );
+              curClass.students = await getStudentsByClassId(curClass.id);
+              autoSyncData.students = curClass.students;
+            } catch (sErr) {
+              console.error("Lỗi đồng bộ học viên ngầm:", sErr);
+            }
+          }
+
+          await updateManagedClass(curClass.id, autoSyncData, "lms-auto-sync");
+          const updatedObj = { ...curClass, ...autoSyncData };
+          updatedClasses.push(updatedObj);
+
+          // 3. Tạo thông báo tổng cho người dùng về việc đã thay đổi những gì
+          try {
+            await addSystemNotification({
+              title: `Tự động cập nhật LMS: Lớp ${curClass.name}`,
+              message: `Hệ thống đã tự động đồng bộ ${changeDetails.length} dữ liệu mới từ LMS vào Supabase`,
+              details: changeDetails,
+              type: "LMS_SYNC",
+              classId: curClass.id,
+            }, "system");
+          } catch (notifErr) {
+            console.error("Lỗi tạo thông báo:", notifErr);
+          }
         }
       }
 
       return NextResponse.json({
         success: true,
         changesMap,
+        updatedClasses,
       });
     }
 
@@ -366,7 +485,53 @@ export async function GET(request: NextRequest) {
     }
 
     // B. Mặc định: Trả về danh sách lớp ĐANG ĐƯỢC QUẢN LÝ (Lưu trong Supabase)
+    const teacherFilter = searchParams.get("teacher") || searchParams.get("teacherId");
     const managedList = await getManagedClasses(targetCentreIds);
+
+    // Gắn danh sách học viên active của từng lớp từ managed_students
+    const allStudentsMap = await getAllManagedStudentsMap(true);
+    const studentsByClass: Record<string, any[]> = {};
+    Object.values(allStudentsMap).forEach((st) => {
+      if (st.classId && (st.status || "ACTIVE").toUpperCase() === "ACTIVE") {
+        if (!studentsByClass[st.classId]) studentsByClass[st.classId] = [];
+        studentsByClass[st.classId].push(st);
+      }
+    });
+    managedList.forEach((c) => {
+      c.students = studentsByClass[c.id] || [];
+    });
+
+    // Tra cứu danh sách giáo viên phụ trách hợp lệ: Đã có trong Supabase, đã approved và đã liên kết Google Drive (OAuth)
+    const { data: allTeacherUsers } = await supabase
+      .from("users")
+      .select("id, full_name, lms_code, email, roles(name), user_statuses(name)");
+
+    const eligibleTeachers = (allTeacherUsers || [])
+      .filter((u: any) => {
+        const statusRelation = u.user_statuses;
+        const statusObj = Array.isArray(statusRelation) ? statusRelation[0] : statusRelation;
+        const statusName = String(statusObj?.name || "").toLowerCase().trim();
+        const isApproved =
+          statusName === "approved" ||
+          statusName === "đã phê duyệt" ||
+          statusName.includes("phê duyệt") ||
+          statusName === "active";
+        if (!isApproved) return false;
+
+        const isOAuth = hasGoogleDriveConnected(u.id) || Boolean(u.email && u.email.includes("@"));
+        if (!isOAuth) return false;
+
+        const roleRelation = u.roles;
+        const roleObj = Array.isArray(roleRelation) ? roleRelation[0] : roleRelation;
+        const roleName = String(roleObj?.name || "").toLowerCase();
+        return roleName.includes("teacher") || roleName.includes("giáo viên") || roleName.includes("admin");
+      })
+      .map((u: any) => ({
+        id: u.id,
+        fullName: u.full_name || "",
+        lmsCode: u.lms_code || "",
+        email: u.email || "",
+      }));
 
     // Lọc theo phân quyền vai trò (Teacher Part-time chỉ thấy lớp do mình dạy)
     let filtered = managedList.filter(isClassTaughtByCurrentUser);
@@ -375,6 +540,28 @@ export async function GET(request: NextRequest) {
       filtered = filtered.filter(
         (c) => (c.status || "").toUpperCase() === statusFilter.toUpperCase()
       );
+    }
+
+    if (teacherFilter && teacherFilter !== "ALL" && teacherFilter !== "all") {
+      const matchedTeacher = eligibleTeachers.find(
+        (t: any) =>
+          t.id === teacherFilter ||
+          (t.lmsCode && t.lmsCode.toLowerCase() === teacherFilter.toLowerCase()) ||
+          (t.fullName && t.fullName.toLowerCase() === teacherFilter.toLowerCase())
+      );
+      const targetCode = (matchedTeacher?.lmsCode || teacherFilter).toLowerCase();
+      const targetName = (matchedTeacher?.fullName || teacherFilter).toLowerCase();
+
+      filtered = filtered.filter((c) => {
+        if (Array.isArray(c.teacherCodes)) {
+          if (c.teacherCodes.some((code) => code && code.toLowerCase() === targetCode)) return true;
+        }
+        if (c.teacherName) {
+          const lowerTN = c.teacherName.toLowerCase();
+          if (lowerTN.includes(targetName) || lowerTN.includes(targetCode)) return true;
+        }
+        return false;
+      });
     }
 
     if (search) {
@@ -393,6 +580,7 @@ export async function GET(request: NextRequest) {
       userRole: currentUserRole,
       totalCount: filtered.length,
       classes: filtered,
+      eligibleTeachers,
     });
   } catch (err: any) {
     console.error("Lỗi khi xử lý API classes:", err);
@@ -419,17 +607,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Thông tin lớp học không hợp lệ" }, { status: 400 });
     }
 
-    // 1. Kiểm tra xem trong các giáo viên phụ trách (LEC/TA), có ít nhất 1 giáo viên đã có tài khoản trong Supabase và đã được phê duyệt (approved) chưa
+    // 1. Kiểm tra xem trong các giáo viên phụ trách (LEC/TA/Supply), có ít nhất 1 giáo viên đã có tài khoản trong Supabase, đã được phê duyệt (approved) và đã liên kết Google Drive (OAuth)
     const { data: allUsers, error: usersErr } = await supabase
       .from("users")
-      .select("id, full_name, lms_code, user_statuses(name)");
+      .select("id, full_name, lms_code, email, user_statuses(name)");
 
     if (usersErr) {
       console.error("Lỗi khi tra cứu danh sách người dùng Supabase:", usersErr);
     }
 
-    const approvedTeacherCodes = new Set<string>();
-    const approvedTeacherNames = new Set<string>();
+    const eligibleTeacherCodes = new Set<string>();
+    const eligibleTeacherNames = new Set<string>();
 
     (allUsers || []).forEach((u: any) => {
       const statusRelation = u.user_statuses;
@@ -442,48 +630,50 @@ export async function POST(request: NextRequest) {
         statusName.includes("phê duyệt") ||
         statusName === "active";
 
-      if (isApproved) {
-        if (u.lms_code) approvedTeacherCodes.add(u.lms_code.trim().toLowerCase());
-        if (u.full_name) approvedTeacherNames.add(u.full_name.trim().toLowerCase());
+      const isOAuth = hasGoogleDriveConnected(u.id) || Boolean(u.email && u.email.includes("@"));
+
+      if (isApproved && isOAuth) {
+        if (u.lms_code) eligibleTeacherCodes.add(u.lms_code.trim().toLowerCase());
+        if (u.full_name) eligibleTeacherNames.add(u.full_name.trim().toLowerCase());
       }
     });
 
-    let hasAtLeastOneApprovedTeacher = false;
+    let hasAtLeastOneEligibleTeacher = false;
 
     if (Array.isArray(classData.teacherCodes) && classData.teacherCodes.length > 0) {
       for (const code of classData.teacherCodes) {
-        if (code && approvedTeacherCodes.has(code.trim().toLowerCase())) {
-          hasAtLeastOneApprovedTeacher = true;
+        if (code && eligibleTeacherCodes.has(code.trim().toLowerCase())) {
+          hasAtLeastOneEligibleTeacher = true;
           break;
         }
       }
     }
 
-    if (!hasAtLeastOneApprovedTeacher && classData.teacherName) {
+    if (!hasAtLeastOneEligibleTeacher && classData.teacherName) {
       const names = classData.teacherName.split(",").map((n) => {
         return n.replace(/\s*\([^)]*\)/g, "").trim().toLowerCase();
       });
       for (const n of names) {
         if (!n) continue;
-        if (approvedTeacherNames.has(n) || approvedTeacherCodes.has(n)) {
-          hasAtLeastOneApprovedTeacher = true;
+        if (eligibleTeacherNames.has(n) || eligibleTeacherCodes.has(n)) {
+          hasAtLeastOneEligibleTeacher = true;
           break;
         }
-        for (const approvedName of approvedTeacherNames) {
-          if (approvedName.includes(n) || n.includes(approvedName)) {
-            hasAtLeastOneApprovedTeacher = true;
+        for (const eligibleName of eligibleTeacherNames) {
+          if (eligibleName.includes(n) || n.includes(eligibleName)) {
+            hasAtLeastOneEligibleTeacher = true;
             break;
           }
         }
-        if (hasAtLeastOneApprovedTeacher) break;
+        if (hasAtLeastOneEligibleTeacher) break;
       }
     }
 
-    if (!hasAtLeastOneApprovedTeacher) {
+    if (!hasAtLeastOneEligibleTeacher) {
       return NextResponse.json(
         {
-          error: "Tài khoản này chưa được cấp quyền truy cập vào website này",
-          message: "Lớp học này không có giáo viên phụ trách nào (LEC hoặc TA) có tài khoản đã được phê duyệt trên hệ thống.",
+          error: "Giáo viên phụ trách chưa liên kết Google Drive hoặc chưa được phê duyệt",
+          message: "Lớp học này chưa có giáo viên phụ trách nào (LEC hoặc TA) có tài khoản đã được phê duyệt và hoàn tất liên kết Google Drive (OAuth) trên hệ thống.",
         },
         { status: 400 }
       );
@@ -568,8 +758,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: result.message || "Không thể lưu lớp học" }, { status: 400 });
     }
 
-    // Chỉ tự động thêm hoặc cập nhật học viên nếu yêu cầu có cờ autoSyncStudents = true
-    if (body.autoSyncStudents && Array.isArray(classData.students) && classData.students.length > 0) {
+    // Tự động lưu/đồng bộ danh sách học viên active của lớp vào managed_students
+    if (Array.isArray(classData.students) && classData.students.length > 0) {
       try {
         await syncStudentsForClass(
           {

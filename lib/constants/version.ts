@@ -20,36 +20,36 @@ export interface ReleaseVersion {
 
 // Phiên bản hiện tại mới nhất của hệ thống
 export const CURRENT_VERSION: ReleaseVersion = {
-  version: "v2.1",
-  releaseDate: "15/09/2026",
+  version: "v2.3",
+  releaseDate: "21/09/2026",
   title:
-    "Màn Hình Quản Lý Học Viên Độc Lập, Tinh Gọn 7 Cột Dữ Liệu, Hỗ Trợ Toàn Diện Giảng Viên & Trợ Giảng (LEC/TA)",
+    "Thống Kê Lượt Truy Cập Tài Khoản & Toàn Trang Lưu Supabase, Nhắc Lịch Trải Nghiệm Telegram & Hoàn Thiện Vận Hành",
   summary:
-    "Bổ sung màn hình Quản lý học viên độc lập với mã học viên tự sinh chuẩn hóa và tinh gọn bảng dữ liệu 7 cột. Hỗ trợ nhận diện toàn diện cả Giảng viên chính (LEC) và Trợ giảng (TA) từ LMS, tối ưu hóa điều kiện thêm lớp khi có ít nhất một giáo viên phụ trách đã được phê duyệt trên hệ thống.",
+    "Nâng cấp thống kê lượt truy cập cá nhân trên từng Dashboard và tổng lượt truy cập toàn trang (thành viên + khách) lưu trữ bền vững trên Supabase Database. Tích hợp hẹn giờ thông báo lịch trải nghiệm qua Telegram Bot, quản lý học sinh và tối ưu vận hành toàn diện.",
   features: [
     {
-      title: "Màn Hình Quản Lý Học Viên Độc Lập & Bảng 7 Cột Tinh Gọn",
+      title: "Thống Kê Lượt Truy Cập Tài Khoản & Toàn Trang Lưu Supabase",
       description:
-        "Tách biệt hoàn toàn Quản lý học viên thành màn hình độc lập có phân quyền riêng, tự động sinh mã học viên không trùng lặp, hỗ trợ đối chiếu học viên thời gian thực với LMS và tinh gọn bảng dữ liệu về 7 cột chuẩn rõ ràng.",
+        "Dashboard của từng tài khoản hiển thị chính xác số lượt truy cập của tài khoản đó. Phù hiệu nổi và tổng quan toàn trang tính toán chính xác tổng lượt truy cập của toàn bộ tài khoản cộng với khách vãng lai, lưu trữ bền vững trên Supabase.",
       category: "Tính Năng Mới",
     },
     {
-      title: "Nhận Diện Toàn Diện Giảng Viên Chính (LEC) & Trợ Giảng (TA)",
+      title: "Hẹn Giờ Nhắc Lịch Trải Nghiệm Qua Telegram Bot",
       description:
-        "Quét đồng thời từ 3 nguồn dữ liệu LMS (class teachers, session teachers, session attendance) để nhận diện đầy đủ cả Giảng viên và Trợ giảng, cấp quyền xem và quản lý lớp phân công cho cả hai vai trò.",
+        "Cấu hình chu kỳ nhắc lịch trải nghiệm linh hoạt (hàng ngày, hàng tuần, hàng tháng) gửi thông báo trực tiếp qua Telegram Bot kèm định dạng HTML trực quan và tự động ghi nhật ký thông báo hệ thống.",
       category: "Tính Năng Mới",
     },
     {
-      title: "Tối Ưu Điều Kiện Thêm Lớp Học Theo Giáo Viên Đã Phê Duyệt",
+      title: "Quản Lý Chỉ Tiêu & Khối Lượng Giảng Dạy Giáo Viên",
       description:
-        "Cho phép thêm lớp học vào hệ thống quản lý khi có ít nhất 1 trong số các giáo viên phụ trách (LEC hoặc TA) đã có tài khoản và được phê duyệt trên Supabase Database.",
+        "Tích hợp theo dõi chỉ tiêu buổi dạy, số ca phụ trách và phân bổ học sinh theo từng giáo viên trực thuộc.",
       category: "Cải Tiến",
     },
     {
-      title: "Hiển Thị Thay Đổi Trực Tiếp Tại Từng Dòng Học Viên",
+      title: "Tối Ưu Hóa Hiệu Năng & Đồng Bộ LMS Thời Gian Thực",
       description:
-        "Trong tab danh sách học viên của lớp học, các biến động từ LMS (Họ tên, Trạng thái, v.v.) được hiển thị trực tiếp tại từng học viên kèm nút cập nhật riêng lẻ, loại bỏ hoàn toàn các banner ẩn/hiện gây phân mảnh.",
-      category: "Cải Tiến",
+        "Tự động tính toán tiến độ hoàn thành buổi học thực tế từ LMS, chống trùng lặp dữ liệu và bảo đảm ổn định tối đa trên môi trường Production.",
+      category: "Bảo Mật & Ổn Định",
     },
   ],
 };

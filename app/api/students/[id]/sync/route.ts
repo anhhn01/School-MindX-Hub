@@ -35,7 +35,74 @@ export async function POST(
 
     const lmsStudent = (lmsClass.students || []).find((s) => s.id === studentId);
     if (!lmsStudent) {
-      // Học viên không còn trong danh sách active trên LMS
+      // Học viên không còn trong danh sách active trên LMS của lớp này.
+      // Kiểm tra xem học viên có chuyển sang lớp học khác trong danh sách lớp quản lý hay không
+      const { getAllManagedClassesMap } = await import("@/lib/services/managed-classes-service");
+      const classMap = await getAllManagedClassesMap();
+      let transferredClass: any = null;
+
+      for (const [cId, cls] of Object.entries(classMap)) {
+        if (cId === currentStudent.classId) continue;
+        try {
+          const checkCls = await fetchClassByIdFromLms(cId);
+          const found = (checkCls?.students || []).find((s) => s.id === studentId);
+          if (found) {
+            transferredClass = { ...cls, studentData: found };
+            break;
+          }
+        } catch (_) {}
+      }
+
+      if (transferredClass) {
+        // Phát hiện học viên đã chuyển lớp
+        if (!confirm) {
+          return NextResponse.json({
+            success: true,
+            hasChanges: true,
+            diffs: [
+              {
+                field: "className",
+                label: "Lớp học (Phát hiện chuyển lớp)",
+                oldValue: `${currentStudent.className} (GV: ${currentStudent.teacherName || currentStudent.lastTeacherName || "Chưa gán"})`,
+                newValue: `${transferredClass.name} (GV: ${transferredClass.teacherName || "Chưa gán"})`,
+              },
+              {
+                field: "status",
+                label: "Trạng thái",
+                oldValue: currentStudent.status || "ACTIVE",
+                newValue: transferredClass.studentData.status || "ACTIVE",
+              },
+            ],
+          });
+        } else {
+          // Lưu vết lớp và giáo viên cũ
+          currentStudent.lastClassId = currentStudent.classId;
+          currentStudent.lastClassName = currentStudent.className;
+          currentStudent.lastTeacherName = currentStudent.teacherName || currentStudent.lastTeacherName;
+          currentStudent.lastTeacherCodes = currentStudent.teacherCodes || currentStudent.lastTeacherCodes;
+
+          // Cập nhật lớp và giáo viên mới
+          currentStudent.classId = transferredClass.id;
+          currentStudent.className = transferredClass.name;
+          currentStudent.teacherName = transferredClass.teacherName;
+          currentStudent.teacherCodes = transferredClass.teacherCodes || [];
+          currentStudent.centreId = transferredClass.centreId;
+          currentStudent.centreName = transferredClass.centreName;
+          currentStudent.status = transferredClass.studentData.status || "ACTIVE";
+          currentStudent.updatedAt = new Date().toISOString();
+
+          studentsMap[studentId] = currentStudent;
+          await saveAllManagedStudentsMap(studentsMap);
+
+          return NextResponse.json({
+            success: true,
+            message: `Đã tự động chuyển học viên sang lớp ${transferredClass.name} do ${transferredClass.teacherName} phụ trách`,
+            updatedStudent: currentStudent,
+          });
+        }
+      }
+
+      // Học viên không còn trong lớp và chưa xác định được lớp mới -> giữ giáo viên phụ trách gần nhất
       if (!confirm) {
         return NextResponse.json({
           success: true,
@@ -50,13 +117,18 @@ export async function POST(
           ],
         });
       } else {
+        currentStudent.lastClassId = currentStudent.classId;
+        currentStudent.lastClassName = currentStudent.className;
+        currentStudent.lastTeacherName = currentStudent.teacherName || currentStudent.lastTeacherName;
+        currentStudent.lastTeacherCodes = currentStudent.teacherCodes || currentStudent.lastTeacherCodes;
+
         currentStudent.status = "INACTIVE";
         currentStudent.updatedAt = new Date().toISOString();
         studentsMap[studentId] = currentStudent;
         await saveAllManagedStudentsMap(studentsMap);
         return NextResponse.json({
           success: true,
-          message: "Đã cập nhật trạng thái học viên thành không hoạt động",
+          message: "Đã cập nhật trạng thái học viên thành không hoạt động (lưu giữ giáo viên phụ trách gần nhất)",
           updatedStudent: currentStudent,
         });
       }

@@ -21,7 +21,7 @@ export async function PATCH(
   try {
     const { id: userId } = await params;
     const body = await request.json();
-    const { full_name, email, lms_code, password } = body;
+    const { full_name, email, lms_code, password, max_submission_quota_mb } = body;
 
     const currentUserId = request.cookies.get("user_id")?.value;
     const currentUserRole = request.cookies.get("user_role")?.value
@@ -71,7 +71,27 @@ export async function PATCH(
       );
     }
 
-    // 4. Prepare fields to update
+    // 4. Xử lý Cập nhật Hạn mức tối đa nộp bài (Chỉ Quản trị viên Admin mới có quyền)
+    if (max_submission_quota_mb !== undefined) {
+      const isAdmin = currentUserRole.toLowerCase().includes("admin");
+      if (!isAdmin) {
+        return NextResponse.json(
+          { error: "Chỉ Quản trị viên (Admin) mới có quyền chỉnh sửa hạn mức nộp tối đa của giáo viên." },
+          { status: 403 }
+        );
+      }
+      const val = Number(max_submission_quota_mb);
+      if (isNaN(val) || val < 1) {
+        return NextResponse.json(
+          { error: "Hạn mức nộp tối đa phải là số nguyên dương (MB)." },
+          { status: 400 }
+        );
+      }
+      const { updateTeacherMaxQuota } = await import("@/lib/services/teacher-quota-service");
+      await updateTeacherMaxQuota(userId, val, currentUserId || "admin");
+    }
+
+    // 5. Prepare fields to update
     const updateData: Record<string, any> = {};
 
     if (full_name !== undefined) updateData.full_name = full_name.trim();
@@ -82,24 +102,27 @@ export async function PATCH(
       updateData.password_hash = await bcrypt.hash(password.trim(), 10);
     }
 
-    if (Object.keys(updateData).length === 0) {
+    if (Object.keys(updateData).length === 0 && max_submission_quota_mb === undefined) {
       return NextResponse.json(
         { error: "Không có thông tin nào để cập nhật" },
         { status: 400 }
       );
     }
 
-    // 4. Update user in Supabase DB
-    const { data: updatedUser, error: updateError } = await supabase
-      .from("users")
-      .update(updateData)
-      .eq("id", userId)
-      .select()
-      .single();
+    let updatedUser = targetUser;
+    if (Object.keys(updateData).length > 0) {
+      const { data, error: updateError } = await supabase
+        .from("users")
+        .update(updateData)
+        .eq("id", userId)
+        .select()
+        .single();
 
-    if (updateError) {
-      console.error("Error updating user details:", updateError);
-      return NextResponse.json({ error: updateError.message }, { status: 500 });
+      if (updateError) {
+        console.error("Error updating user details:", updateError);
+        return NextResponse.json({ error: updateError.message }, { status: 500 });
+      }
+      updatedUser = data;
     }
 
     return NextResponse.json({

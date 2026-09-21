@@ -43,6 +43,9 @@ export async function GET() {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
+    const { getAllTeacherQuotas } = await import("@/lib/services/teacher-quota-service");
+    const teacherQuotas = await getAllTeacherQuotas();
+
     // Join & format user_statuses and roles as text strings without foreign key IDs
     const formattedUsers = (users || [])
       .filter((u: any) => !u.lms_code?.startsWith("__"))
@@ -58,6 +61,8 @@ export async function GET() {
         u.password_hash === "LMS_EXTERNAL_ACCOUNT" ||
         !u.password_hash ||
         String(u.password_hash).startsWith("LMS_");
+
+      const tQuota = teacherQuotas[u.id];
 
       return {
         id: u.id,
@@ -75,6 +80,8 @@ export async function GET() {
             : "Chờ phê duyệt",
         role: roleName, // Text representation instead of role_id
         role_points: getRolePoints(roleName), // Điểm phân cấp vai trò (điểm càng thấp, quyền càng cao)
+        max_submission_quota_mb: tQuota ? tQuota.maxQuotaMb : 100,
+        default_student_quota_mb: tQuota ? tQuota.defaultStudentQuotaMb : 50,
       };
     });
 

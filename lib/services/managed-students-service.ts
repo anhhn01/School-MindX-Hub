@@ -54,11 +54,31 @@ const MANAGED_STUDENTS_FALLBACK_LMS_CODE = "__managed_students__";
  * 3. Bản ghi fallback trong bảng `users`
  * 4. File local `data/managed_students_store.json`
  */
-export async function getAllManagedStudentsMap(): Promise<Record<string, ManagedStudent>> {
+export async function getAllManagedStudentsMap(forceRefresh = false): Promise<Record<string, ManagedStudent>> {
   const now = Date.now();
-  if (memoryStore && now - lastFetchTime < CACHE_TTL_MS) {
+  if (!forceRefresh && memoryStore && now - lastFetchTime < CACHE_TTL_MS) {
     return memoryStore;
   }
+
+  // 0. Đọc system_settings từ Supabase để đồng bộ định mức và thông tin giáo viên phụ trách mới nhất
+  let studentQuotas: Record<string, number> = {};
+  let ssStudentsMap: Record<string, ManagedStudent> = {};
+  try {
+    const { data: ssRows } = await supabase
+      .from("system_settings")
+      .select("key, value")
+      .in("key", ["student_quotas", "managed_students"]);
+    if (Array.isArray(ssRows)) {
+      for (const row of ssRows) {
+        if (row.key === "student_quotas" && row.value && typeof row.value === "object") {
+          studentQuotas = row.value as Record<string, number>;
+        }
+        if (row.key === "managed_students" && row.value && typeof row.value === "object") {
+          ssStudentsMap = row.value as Record<string, ManagedStudent>;
+        }
+      }
+    }
+  } catch (_) {}
 
   // 1. Thử đọc trực tiếp từ bảng managed_students trong Supabase
   try {
@@ -66,9 +86,15 @@ export async function getAllManagedStudentsMap(): Promise<Record<string, Managed
       .from("managed_students")
       .select("*");
 
-    if (!error && Array.isArray(rows)) {
+    if (!error && Array.isArray(rows) && rows.length > 0) {
       const map: Record<string, ManagedStudent> = {};
       rows.forEach((r: any) => {
+        const quota = r.submission_quota_mb
+          ? Number(r.submission_quota_mb)
+          : (studentQuotas[r.id] ?? 50);
+
+        const ssStudent = ssStudentsMap[r.id];
+
         map[r.id] = {
           id: r.id,
           studentCode: r.student_code,
@@ -79,8 +105,15 @@ export async function getAllManagedStudentsMap(): Promise<Record<string, Managed
           courseName: r.course_name,
           centreId: r.centre_id,
           centreName: r.centre_name,
+          teacherName: r.teacher_name || ssStudent?.teacherName || null,
+          teacherCodes: r.teacher_codes || ssStudent?.teacherCodes || [],
+          lastTeacherName: r.last_teacher_name || ssStudent?.lastTeacherName || null,
+          lastTeacherCodes: r.last_teacher_codes || ssStudent?.lastTeacherCodes || [],
+          lastClassId: r.last_class_id || ssStudent?.lastClassId || null,
+          lastClassName: r.last_class_name || ssStudent?.lastClassName || null,
           email: r.email,
           phoneNumber: r.phone_number,
+          submissionQuotaMb: quota,
           addedAt: r.added_at,
           updatedAt: r.updated_at,
           addedBy: r.added_by,
@@ -103,8 +136,16 @@ export async function getAllManagedStudentsMap(): Promise<Record<string, Managed
       .eq("key", "managed_students")
       .maybeSingle();
 
-    if (!error && data && data.value && typeof data.value === "object") {
-      memoryStore = data.value as Record<string, ManagedStudent>;
+    if (!error && data && data.value && typeof data.value === "object" && Object.keys(data.value).length > 0) {
+      const sMap = data.value as Record<string, ManagedStudent>;
+      for (const [id, st] of Object.entries(sMap)) {
+        if (studentQuotas[id] !== undefined) {
+          st.submissionQuotaMb = studentQuotas[id];
+        } else if (!st.submissionQuotaMb) {
+          st.submissionQuotaMb = 50;
+        }
+      }
+      memoryStore = sMap;
       lastFetchTime = now;
       writeLocalFile(memoryStore);
       return memoryStore;
@@ -131,9 +172,41 @@ export async function saveAllManagedStudentsMap(
   lastFetchTime = Date.now();
   writeLocalFile(data);
 
-  let savedDirectly = false;
+  // 1. Lưu bản đồ định mức student_quotas riêng biệt trực tiếp vào Supabase system_settings
+  const studentQuotas: Record<string, number> = {};
+  for (const [id, s] of Object.entries(data)) {
+    studentQuotas[id] = s.submissionQuotaMb || 50;
+  }
+  try {
+    await supabase.from("system_settings").upsert(
+      {
+        key: "student_quotas",
+        value: studentQuotas,
+        updated_at: new Date().toISOString(),
+        updated_by: updatedBy,
+      },
+      { onConflict: "key" }
+    );
+  } catch (e) {
+    console.warn("Lỗi lưu student_quotas vào Supabase:", e);
+  }
 
-  // 1. Thử lưu vào bảng `managed_students` thực trên Supabase
+  // 2. Lưu toàn bộ danh sách managed_students kèm submissionQuotaMb vào Supabase system_settings
+  try {
+    await supabase.from("system_settings").upsert(
+      {
+        key: "managed_students",
+        value: data,
+        updated_at: new Date().toISOString(),
+        updated_by: updatedBy,
+      },
+      { onConflict: "key" }
+    );
+  } catch (err) {
+    console.warn("Lỗi lưu managed_students vào Supabase system_settings:", err);
+  }
+
+  // 3. Cập nhật bảng managed_students thực trên Supabase
   try {
     const records = Object.values(data).map((s) => ({
       id: s.id,
@@ -145,8 +218,15 @@ export async function saveAllManagedStudentsMap(
       course_name: s.courseName || null,
       centre_id: s.centreId,
       centre_name: s.centreName,
+      teacher_name: s.teacherName || null,
+      teacher_codes: s.teacherCodes || [],
+      last_teacher_name: s.lastTeacherName || null,
+      last_teacher_codes: s.lastTeacherCodes || [],
+      last_class_id: s.lastClassId || null,
+      last_class_name: s.lastClassName || null,
       email: s.email || null,
       phone_number: s.phoneNumber || null,
+      submission_quota_mb: s.submissionQuotaMb || 50,
       added_at: s.addedAt || new Date().toISOString(),
       updated_at: new Date().toISOString(),
       added_by: s.addedBy || updatedBy,
@@ -157,26 +237,25 @@ export async function saveAllManagedStudentsMap(
         .from("managed_students")
         .upsert(records, { onConflict: "id" });
 
-      if (!error) {
-        savedDirectly = true;
+      if (error) {
+        // Fallback: nếu bảng Supabase chưa chạy migration 00014, bỏ qua các cột mới
+        const fallbackRecords = records.map(
+          ({
+            teacher_name,
+            teacher_codes,
+            last_teacher_name,
+            last_teacher_codes,
+            last_class_id,
+            last_class_name,
+            ...rest
+          }) => rest
+        );
+        await supabase
+          .from("managed_students")
+          .upsert(fallbackRecords, { onConflict: "id" });
       }
     }
-  } catch (err) {
-    // Bảng chưa tạo
-  }
-
-  // 2. Lưu đồng thời vào system_settings (key = 'managed_students')
-  try {
-    await supabase.from("system_settings").upsert(
-      {
-        key: "managed_students",
-        value: data,
-        updated_at: new Date().toISOString(),
-        updated_by: updatedBy,
-      },
-      { onConflict: "key" }
-    );
-  } catch (err) {}
+  } catch (_) {}
 
   return true;
 }
@@ -255,10 +334,34 @@ export async function syncStudentsForClass(
   let addedCount = 0;
   let updatedCount = 0;
 
+  // Lấy định mức mặc định của giáo viên phụ trách lớp này (nếu có)
+  let defaultQuotaMb = 50;
+  let targetTeacherName: string | null = null;
+  let targetTeacherCodes: string[] = [];
+  try {
+    const { getAllManagedClassesMap } = await import("./managed-classes-service");
+    const classMap = await getAllManagedClassesMap();
+    const targetClass = classMap[classInfo.id];
+    if (targetClass) {
+      targetTeacherName = targetClass.teacherName || null;
+      targetTeacherCodes = targetClass.teacherCodes || [];
+      const teacherKey = targetClass.teacherCodes?.[0] || targetClass.teacherName || "";
+      const { getTeacherQuota } = await import("./teacher-quota-service");
+      const tQuota = await getTeacherQuota(teacherKey);
+      defaultQuotaMb = tQuota.defaultStudentQuotaMb || 50;
+    }
+  } catch (_) {}
+
   for (const lmsStudent of activeLmsStudents) {
     const existing = map[lmsStudent.id];
     if (existing) {
-      // Đã có trong danh sách -> Cập nhật thông tin lớp, trạng thái, giữ nguyên mã học viên cũ
+      // Đã có trong danh sách -> Cập nhật thông tin lớp, trạng thái, theo dõi chuyển lớp Thầy A -> Thầy B
+      const isClassChanged = existing.classId !== classInfo.id;
+      const lastClassId = isClassChanged ? existing.classId : existing.lastClassId || classInfo.id;
+      const lastClassName = isClassChanged ? existing.className : existing.lastClassName || classInfo.name;
+      const lastTeacherName = isClassChanged ? (existing.teacherName || existing.lastTeacherName || targetTeacherName) : (existing.lastTeacherName || targetTeacherName);
+      const lastTeacherCodes = isClassChanged ? (existing.teacherCodes || existing.lastTeacherCodes || targetTeacherCodes) : (existing.lastTeacherCodes || targetTeacherCodes);
+
       map[lmsStudent.id] = {
         ...existing,
         fullName: lmsStudent.fullName || existing.fullName,
@@ -268,8 +371,15 @@ export async function syncStudentsForClass(
         courseName: classInfo.courseName || existing.courseName,
         centreId: classInfo.centreId,
         centreName: classInfo.centreName,
+        teacherName: targetTeacherName || existing.teacherName,
+        teacherCodes: targetTeacherCodes.length > 0 ? targetTeacherCodes : (existing.teacherCodes || []),
+        lastTeacherName,
+        lastTeacherCodes,
+        lastClassId,
+        lastClassName,
         email: lmsStudent.email !== undefined ? lmsStudent.email : existing.email,
         phoneNumber: lmsStudent.phoneNumber !== undefined ? lmsStudent.phoneNumber : existing.phoneNumber,
+        submissionQuotaMb: existing.submissionQuotaMb || defaultQuotaMb,
         updatedAt: new Date().toISOString(),
       };
       updatedCount++;
@@ -288,8 +398,15 @@ export async function syncStudentsForClass(
         courseName: classInfo.courseName || null,
         centreId: classInfo.centreId,
         centreName: classInfo.centreName,
+        teacherName: targetTeacherName,
+        teacherCodes: targetTeacherCodes,
+        lastTeacherName: targetTeacherName,
+        lastTeacherCodes: targetTeacherCodes,
+        lastClassId: classInfo.id,
+        lastClassName: classInfo.name,
         email: lmsStudent.email || null,
         phoneNumber: lmsStudent.phoneNumber || null,
+        submissionQuotaMb: defaultQuotaMb,
         addedAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         addedBy: userId,
@@ -405,9 +522,21 @@ export async function reviewStudentsForClass(
 
   const existingCodes = await getAllExistingStudentCodes();
   const reviews: StudentReviewItem[] = [];
+  let hasAutoUpdatedStudents = false;
+  const fullMap = await getAllManagedStudentsMap();
 
   for (const lmsSt of rawLmsStudents) {
-    const existing = mapByLmsId.get(lmsSt.id) || mapByName.get(lmsSt.fullName.trim().toLowerCase());
+    // Tìm trong lớp hiện tại hoặc trên toàn bộ hệ thống Supabase để phát hiện chuyển lớp
+    let existing = mapByLmsId.get(lmsSt.id) || mapByName.get(lmsSt.fullName.trim().toLowerCase());
+    if (!existing && fullMap[lmsSt.id]) {
+      existing = fullMap[lmsSt.id];
+    }
+    if (!existing) {
+      const matchByName = Object.values(fullMap).find(
+        (s) => s.fullName && s.fullName.trim().toLowerCase() === lmsSt.fullName.trim().toLowerCase()
+      );
+      if (matchByName) existing = matchByName;
+    }
 
     if (!existing) {
       const generatedCode = generateStudentCode(lmsSt.fullName, existingCodes);
@@ -430,6 +559,25 @@ export async function reviewStudentsForClass(
         },
       });
     } else {
+      // Yêu cầu người dùng: Nếu học viên chuyển lớp giữa các Thầy Cô, tự động cập nhật lớp mới và giáo viên mới vào Supabase
+      if (existing.classId !== lmsClass.id) {
+        existing.lastClassId = existing.classId;
+        existing.lastClassName = existing.className;
+        existing.lastTeacherName = existing.teacherName || existing.lastTeacherName;
+        existing.lastTeacherCodes = existing.teacherCodes || existing.lastTeacherCodes;
+
+        existing.classId = lmsClass.id;
+        existing.className = lmsClass.name;
+        existing.courseName = lmsClass.course?.name || existing.courseName;
+        existing.centreId = lmsClass.centre?.id || existing.centreId;
+        existing.centreName = lmsClass.centre?.name || existing.centreName;
+        existing.teacherName = lmsClass.teacherName;
+        existing.teacherCodes = lmsClass.teacherCodes || [];
+        existing.updatedAt = new Date().toISOString();
+        fullMap[existing.id] = existing;
+        hasAutoUpdatedStudents = true;
+      }
+
       const diffs: Array<{ field: string; label: string; oldValue: string; newValue: string }> = [];
 
       // So sánh Họ và tên
@@ -495,7 +643,7 @@ export async function reviewStudentsForClass(
     }
   }
 
-  return {
+  const reviewResult = {
     success: true,
     classId: lmsClass.id,
     className: lmsClass.name,
@@ -510,6 +658,12 @@ export async function reviewStudentsForClass(
       upToDate: reviews.filter((r) => r.reviewStatus === "UP_TO_DATE").length,
     },
   };
+
+  if (hasAutoUpdatedStudents) {
+    await saveAllManagedStudentsMap(fullMap);
+  }
+
+  return reviewResult;
 }
 
 /**
@@ -550,6 +704,7 @@ export async function addSingleStudentToManaged(
     centreName: classInfo.centreName,
     email: studentData.email || null,
     phoneNumber: studentData.phoneNumber || null,
+    submissionQuotaMb: 50,
     addedAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     addedBy: userId,
@@ -590,4 +745,189 @@ export async function syncSingleStudentFromLms(
   await saveAllManagedStudentsMap(map, userId);
   return updated;
 }
+
+/**
+ * Chỉnh sửa thông tin học viên (Xem / Sửa từ giao diện)
+ */
+export async function updateManagedStudent(
+  studentId: string,
+  updateData: {
+    fullName?: string;
+    status?: string;
+    className?: string;
+    classId?: string;
+    centreName?: string;
+    centreId?: string;
+    email?: string | null;
+    phoneNumber?: string | null;
+    submissionQuotaMb?: number;
+  },
+  userId: string = "system"
+): Promise<{ success: boolean; student?: ManagedStudent; message?: string }> {
+  const map = await getAllManagedStudentsMap();
+  const existing = map[studentId];
+  if (!existing) {
+    return { success: false, message: "Không tìm thấy học viên trong hệ thống" };
+  }
+
+  const updated: ManagedStudent = {
+    ...existing,
+    fullName: updateData.fullName !== undefined ? updateData.fullName.trim() : existing.fullName,
+    status: updateData.status !== undefined ? updateData.status.trim() : existing.status,
+    className: updateData.className !== undefined ? updateData.className.trim() : existing.className,
+    classId: updateData.classId !== undefined ? updateData.classId.trim() : existing.classId,
+    centreName: updateData.centreName !== undefined ? updateData.centreName.trim() : existing.centreName,
+    centreId: updateData.centreId !== undefined ? updateData.centreId.trim() : existing.centreId,
+    email: updateData.email !== undefined ? updateData.email : existing.email,
+    phoneNumber: updateData.phoneNumber !== undefined ? updateData.phoneNumber : existing.phoneNumber,
+    submissionQuotaMb:
+      updateData.submissionQuotaMb !== undefined
+        ? Math.max(5, Math.min(Number(updateData.submissionQuotaMb), 500))
+        : existing.submissionQuotaMb || 50,
+    updatedAt: new Date().toISOString(),
+  };
+
+  // Nếu lớp học thay đổi, cập nhật giáo viên phụ trách mới và ghi nhận giáo viên cũ
+  if (updateData.classId && updateData.classId !== existing.classId) {
+    try {
+      const { getAllManagedClassesMap } = await import("./managed-classes-service");
+      const classMap = await getAllManagedClassesMap();
+      const targetClass = classMap[updateData.classId];
+      if (targetClass) {
+        updated.lastClassId = existing.classId;
+        updated.lastClassName = existing.className;
+        updated.lastTeacherName = existing.teacherName || existing.lastTeacherName;
+        updated.lastTeacherCodes = existing.teacherCodes || existing.lastTeacherCodes;
+
+        updated.teacherName = targetClass.teacherName || null;
+        updated.teacherCodes = targetClass.teacherCodes || [];
+        updated.className = targetClass.name;
+        updated.courseName = targetClass.courseName || updated.courseName;
+        updated.centreId = targetClass.centreId || updated.centreId;
+        updated.centreName = targetClass.centreName || updated.centreName;
+      }
+    } catch (_) {}
+  }
+
+  map[studentId] = updated;
+
+  try {
+    const tableUpdatePayload: any = {
+      full_name: updated.fullName,
+      status: updated.status,
+      class_name: updated.className,
+      class_id: updated.classId,
+      centre_name: updated.centreName,
+      centre_id: updated.centreId,
+      teacher_name: updated.teacherName || null,
+      teacher_codes: updated.teacherCodes || [],
+      last_teacher_name: updated.lastTeacherName || null,
+      last_teacher_codes: updated.lastTeacherCodes || [],
+      last_class_id: updated.lastClassId || null,
+      last_class_name: updated.lastClassName || null,
+      email: updated.email,
+      phone_number: updated.phoneNumber,
+      updated_at: updated.updatedAt,
+    };
+    if (updated.submissionQuotaMb !== undefined) {
+      tableUpdatePayload.submission_quota_mb = updated.submissionQuotaMb;
+    }
+    const { error: updateErr } = await supabase
+      .from("managed_students")
+      .update(tableUpdatePayload)
+      .eq("id", studentId);
+
+    if (updateErr) {
+      const fallbackPayload = {
+        full_name: updated.fullName,
+        status: updated.status,
+        class_name: updated.className,
+        class_id: updated.classId,
+        centre_name: updated.centreName,
+        centre_id: updated.centreId,
+        email: updated.email,
+        phone_number: updated.phoneNumber,
+        updated_at: updated.updatedAt,
+        ...(updated.submissionQuotaMb !== undefined ? { submission_quota_mb: updated.submissionQuotaMb } : {}),
+      };
+      await supabase.from("managed_students").update(fallbackPayload).eq("id", studentId);
+    }
+  } catch (err) {}
+
+  await saveAllManagedStudentsMap(map, userId);
+  return { success: true, student: updated };
+}
+
+/**
+ * Tự động đồng bộ giáo viên phụ trách cho toàn bộ học viên theo lớp học hiện tại:
+ * - Nếu học viên đang học lớp X (Thầy A): gán teacherName = Thầy A.
+ * - Nếu chuyển sang lớp Y (Thầy B): Thầy B trở thành teacherName, Thầy A lưu vào lastTeacherName.
+ * - Nếu lớp học hiện tại không xác định được: giữ nguyên lastTeacherName để Thầy cuối cùng vẫn xem được.
+ */
+export async function reconcileStudentsWithClasses(
+  studentsMap?: Record<string, ManagedStudent>
+): Promise<{ updated: boolean; count: number; students: Record<string, ManagedStudent> }> {
+  try {
+    const { getAllManagedClassesMap } = await import("./managed-classes-service");
+    const classMap = await getAllManagedClassesMap();
+    const map = studentsMap || (await getAllManagedStudentsMap());
+    let hasChanges = false;
+    let count = 0;
+
+    for (const [id, student] of Object.entries(map)) {
+      const targetClass = student.classId ? classMap[student.classId] : null;
+
+      if (targetClass) {
+        const currentTeacherName = targetClass.teacherName || null;
+        const currentTeacherCodes = targetClass.teacherCodes || [];
+
+        const isTeacherDiff = student.teacherName !== currentTeacherName;
+        const isClassDiff = student.className !== targetClass.name;
+
+        if (isTeacherDiff || isClassDiff || !student.teacherName) {
+          if (student.teacherName && student.teacherName !== currentTeacherName) {
+            student.lastTeacherName = student.teacherName;
+            student.lastTeacherCodes = student.teacherCodes || [];
+            student.lastClassId = student.classId;
+            student.lastClassName = student.className;
+          } else if (!student.lastTeacherName && currentTeacherName) {
+            student.lastTeacherName = currentTeacherName;
+            student.lastTeacherCodes = currentTeacherCodes;
+            student.lastClassId = targetClass.id;
+            student.lastClassName = targetClass.name;
+          }
+
+          student.teacherName = currentTeacherName;
+          student.teacherCodes = currentTeacherCodes;
+          student.className = targetClass.name;
+          student.courseName = targetClass.courseName || student.courseName;
+          student.centreId = targetClass.centreId || student.centreId;
+          student.centreName = targetClass.centreName || student.centreName;
+          student.updatedAt = new Date().toISOString();
+          hasChanges = true;
+          count++;
+        }
+      } else {
+        // Lớp không xác định được hoặc không còn trong danh sách quản lý:
+        // Giữ nguyên giáo viên phụ trách cuối cùng (lastTeacherName)
+        if (!student.teacherName && student.lastTeacherName) {
+          student.teacherName = student.lastTeacherName;
+          student.teacherCodes = student.lastTeacherCodes;
+          hasChanges = true;
+          count++;
+        }
+      }
+    }
+
+    if (hasChanges) {
+      await saveAllManagedStudentsMap(map, "system-reconcile");
+    }
+
+    return { updated: hasChanges, count, students: map };
+  } catch (err) {
+    console.warn("Lỗi reconcileStudentsWithClasses:", err);
+    return { updated: false, count: 0, students: studentsMap || {} };
+  }
+}
+
 

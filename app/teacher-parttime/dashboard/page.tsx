@@ -41,7 +41,7 @@ export default function TeacherPartTimeDashboardPage() {
             total_classes: data.stats.total_classes_parttime || 4,
             total_students: data.stats.total_students_parttime || 68,
             total_submissions: data.stats.total_submissions_parttime || 152,
-            total_visits: data.stats.total_visits_parttime || 222,
+            total_visits: data.stats.account_visits || data.stats.total_visits_parttime || 0,
           });
         }
       })
@@ -141,7 +141,7 @@ export default function TeacherPartTimeDashboardPage() {
             </div>
             <div className="min-w-0 flex-1">
               <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 block whitespace-nowrap">
-                Tổng Lượt Truy Cập
+                Lượt Truy Cập Tài Khoản
               </span>
               <h3 className="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-white mt-1 whitespace-nowrap">
                 {loading ? (

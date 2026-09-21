@@ -8,11 +8,25 @@ import {
   ClassDiffItem,
   formatVnDate,
   formatVnTime,
+  formatVnDateTime,
+  normalizeDeadlineFormat,
   calculateDefaultDeadlines,
+  calculateRegularSessions,
+  calculateSessionStatus,
+  parseSessionDeadlineTimes,
 } from "@/lib/types/managed-class";
 
 export type { ManagedClass, ManagedClassSlot, ClassDiffItem };
-export { formatVnDate, formatVnTime, calculateDefaultDeadlines };
+export {
+  formatVnDate,
+  formatVnTime,
+  formatVnDateTime,
+  normalizeDeadlineFormat,
+  calculateDefaultDeadlines,
+  calculateRegularSessions,
+  calculateSessionStatus,
+  parseSessionDeadlineTimes,
+};
 
 
 const DATA_DIR = path.join(process.cwd(), "data");
@@ -102,6 +116,14 @@ export async function getAllManagedClassesMap(): Promise<Record<string, ManagedC
           finalProjectSession: r.final_project_session,
           finalProjectDate: r.final_project_date,
           slots: r.slots || [],
+          regularSessions:
+            r.regular_sessions ||
+            calculateRegularSessions(
+              r.number_of_sessions || (r.slots?.length || 14),
+              r.checkpoint1_session,
+              r.checkpoint2_session,
+              r.final_project_session
+            ),
           addedAt: r.added_at,
           addedBy: r.added_by,
         };
@@ -155,35 +177,56 @@ export async function saveAllManagedClassesMap(
 
   // 1. Lưu trực tiếp vào bảng managed_classes nếu bảng tồn tại
   try {
-    const records = Object.values(data).map((c) => ({
-      id: c.id,
-      name: c.name,
-      status: c.status,
-      course_name: c.courseName || null,
-      centre_id: c.centreId,
-      centre_name: c.centreName,
-      teacher_name: c.teacherName || null,
-      teacher_codes: c.teacherCodes || [],
-      class_time: c.classTime || null,
-      start_date: c.startDate || null,
-      end_date: c.endDate || null,
-      number_of_sessions: c.numberOfSessions || 0,
-      completed_sessions: c.completedSessions || 0,
-      progress_percent: c.progressPercent || 0,
-      checkpoint1_session: c.checkpoint1Session || null,
-      checkpoint1_date: c.checkpoint1Date || null,
-      checkpoint2_session: c.checkpoint2Session || null,
-      checkpoint2_date: c.checkpoint2Date || null,
-      final_project_session: c.finalProjectSession || null,
-      final_project_date: c.finalProjectDate || null,
-      slots: c.slots || [],
-      added_at: c.addedAt || new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      added_by: c.addedBy || updatedBy,
-    }));
+    const records = Object.values(data).map((c) => {
+      const regSessions =
+        c.regularSessions ||
+        calculateRegularSessions(
+          c.numberOfSessions || (c.slots?.length || 14),
+          c.checkpoint1Session,
+          c.checkpoint2Session,
+          c.finalProjectSession
+        );
+      c.regularSessions = regSessions;
+
+      return {
+        id: c.id,
+        name: c.name,
+        status: c.status,
+        course_name: c.courseName || null,
+        centre_id: c.centreId,
+        centre_name: c.centreName,
+        teacher_name: c.teacherName || null,
+        teacher_codes: c.teacherCodes || [],
+        class_time: c.classTime || null,
+        start_date: c.startDate || null,
+        end_date: c.endDate || null,
+        number_of_sessions: c.numberOfSessions || 0,
+        completed_sessions: c.completedSessions || 0,
+        progress_percent: c.progressPercent || 0,
+        checkpoint1_session: c.checkpoint1Session || null,
+        checkpoint1_date: c.checkpoint1Date || null,
+        checkpoint2_session: c.checkpoint2Session || null,
+        checkpoint2_date: c.checkpoint2Date || null,
+        final_project_session: c.finalProjectSession || null,
+        final_project_date: c.finalProjectDate || null,
+        slots: c.slots || [],
+        regular_sessions: regSessions,
+        added_at: c.addedAt || new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        added_by: c.addedBy || updatedBy,
+      };
+    });
 
     if (records.length > 0) {
-      await supabase.from("managed_classes").upsert(records, { onConflict: "id" });
+      const { error: upsertErr } = await supabase
+        .from("managed_classes")
+        .upsert(records, { onConflict: "id" });
+
+      // Nếu cột regular_sessions chưa được migrate trên Supabase DB, fallback bỏ cột đó để không crash
+      if (upsertErr && String(upsertErr.message || "").includes("regular_sessions")) {
+        const sanitizedRecords = records.map(({ regular_sessions, ...rest }) => rest);
+        await supabase.from("managed_classes").upsert(sanitizedRecords, { onConflict: "id" });
+      }
     }
   } catch (err) {}
 
@@ -334,64 +377,48 @@ export function compareClassWithLms(
     });
   }
 
-  // 3. Trạng thái lớp học
-  const oldStatus = current.status || "";
-  const newStatus = lms.status || "";
-  if (oldStatus !== newStatus) {
-    diffs.push({
-      field: "status",
-      label: "Trạng thái lớp",
-      oldValue: oldStatus,
-      newValue: newStatus,
-    });
-  }
-
-  // 4. Số buổi học
-  if (current.numberOfSessions !== lms.numberOfSessions) {
+  // 3. Số buổi học
+  if (lms.numberOfSessions && current.numberOfSessions !== lms.numberOfSessions) {
     diffs.push({
       field: "numberOfSessions",
-      label: "Tổng số buổi học",
-      oldValue: `${current.numberOfSessions} buổi`,
+      label: "Số buổi học",
+      oldValue: `${current.numberOfSessions || 0} buổi`,
       newValue: `${lms.numberOfSessions} buổi`,
     });
   }
 
-  // 5. Tiến độ học tập / Số buổi đã diễn ra
-  const oldCompleted = current.completedSessions || 0;
-  const newCompleted = lms.completedSessions || 0;
-  if (oldCompleted !== newCompleted) {
+  // 4. Trạng thái lớp học (OPEN, RUNNING, FINISHED)
+  if (
+    current.status &&
+    lms.status &&
+    current.status.toUpperCase() !== lms.status.toUpperCase()
+  ) {
     diffs.push({
-      field: "progressPercent",
-      label: "Tiến độ học tập",
-      oldValue: `${oldCompleted}/${current.numberOfSessions} buổi (${current.progressPercent || 0}%)`,
-      newValue: `${newCompleted}/${lms.numberOfSessions} buổi (${lms.progressPercent || 0}%)`,
+      field: "status",
+      label: "Trạng thái lớp học",
+      oldValue: current.status,
+      newValue: lms.status,
     });
   }
 
-  // 6. Ngày bắt đầu / kết thúc
-  const oldStart = formatVnDate(current.startDate);
-  const newStart = formatVnDate(lms.startDate);
-  if (oldStart !== newStart) {
+  // 5. Thay đổi về lịch học các buổi (startDate, endDate) - bắt buộc thông báo, không tự ý ghi đè ngầm
+  const oldStart = formatVnDate(current.startDate) || "Chưa có";
+  const newStart = formatVnDate(lms.startDate) || "Chưa có";
+  const oldEnd = formatVnDate(current.endDate) || "Chưa có";
+  const newEnd = formatVnDate(lms.endDate) || "Chưa có";
+  if (
+    (current.startDate && lms.startDate && oldStart !== newStart) ||
+    (current.endDate && lms.endDate && oldEnd !== newEnd)
+  ) {
     diffs.push({
-      field: "startDate",
-      label: "Ngày bắt đầu",
-      oldValue: oldStart || "N/A",
-      newValue: newStart || "N/A",
+      field: "schedule",
+      label: "Lịch học (Ngày bắt đầu / kết thúc)",
+      oldValue: `${oldStart} - ${oldEnd}`,
+      newValue: `${newStart} - ${newEnd}`,
     });
   }
 
-  const oldEnd = formatVnDate(current.endDate);
-  const newEnd = formatVnDate(lms.endDate);
-  if (oldEnd !== newEnd) {
-    diffs.push({
-      field: "endDate",
-      label: "Ngày kết thúc",
-      oldValue: oldEnd || "N/A",
-      newValue: newEnd || "N/A",
-    });
-  }
-
-  // 7. Học viên active trong lớp
+  // 6. Học viên active trong lớp
   if (existingStudentsCount !== undefined && Array.isArray(lms.students)) {
     const lmsActiveCount = lms.students.filter(
       (s: any) => s.activeInClass !== false

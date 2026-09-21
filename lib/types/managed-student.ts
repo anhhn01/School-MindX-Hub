@@ -10,12 +10,31 @@ export interface ManagedStudent {
   courseName?: string | null;
   centreId: string;
   centreName: string;
+  teacherName?: string | null; // Tên giáo viên phụ trách lớp hiện tại
+  teacherCodes?: string[]; // Danh sách mã giáo viên phụ trách
+  lastTeacherName?: string | null; // Giáo viên phụ trách cuối cùng (dùng khi lớp hiện tại không xác định)
+  lastTeacherCodes?: string[]; // Mã giáo viên phụ trách cuối cùng
+  lastClassId?: string | null; // Lớp học trước đó / cuối cùng
+  lastClassName?: string | null; // Tên lớp học trước đó / cuối cùng
   email?: string | null;
   phoneNumber?: string | null;
   activeInClass?: boolean;
+  submissionQuotaMb?: number; // Định mức dữ liệu nộp (MB), mặc định 50 MB, tối đa 100 MB
   addedAt?: string;
   updatedAt?: string;
   addedBy?: string;
+}
+
+/**
+ * Chuẩn hóa tên giáo viên để so sánh không phân biệt tiền tố (TF, GV, TA) và hậu tố (LEC, TA)
+ */
+export function normalizeTeacherName(name?: string | null): string {
+  if (!name) return "";
+  return name
+    .replace(/\s*\([^)]*\)/g, "") // Bỏ (LEC), (TA), v.v.
+    .replace(/^(tf|gv|ta|thầy|cô)\s+/i, "") // Bỏ tiền tố TF, GV, TA, Thầy, Cô
+    .trim()
+    .toLowerCase();
 }
 
 export interface StudentDiffItem {

@@ -20,9 +20,11 @@ import {
   Copy,
   Download,
   Check,
+  Send,
 } from "lucide-react";
 import * as htmlToImage from "html-to-image";
 import { API_ROUTES } from "@/lib/constants/api-routes";
+import TelegramScheduleSettingsModal from "./TelegramScheduleSettingsModal";
 
 interface UserProfile {
   id?: string;
@@ -238,6 +240,7 @@ export default function TrialSchedulesScreen({ user: initialUser }: { user?: Use
   const [copyingImage, setCopyingImage] = useState<boolean>(false);
   const [copyingCampusId, setCopyingCampusId] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [isTelegramModalOpen, setIsTelegramModalOpen] = useState<boolean>(false);
 
   const showToast = (type: "success" | "error", text: string) => {
     setToastMessage({ type, text });
@@ -726,10 +729,20 @@ export default function TrialSchedulesScreen({ user: initialUser }: { user?: Use
                 <button
                   onClick={() => loadOfficeHours(true)}
                   disabled={loading || refreshing}
-                  className="px-3.5 py-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700 font-semibold text-xs flex items-center justify-center gap-1.5 shadow-sm transition-all disabled:opacity-50 whitespace-nowrap min-h-[38px]"
+                  className="px-3.5 py-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700 font-semibold text-xs flex items-center justify-center gap-1.5 shadow-sm transition-all disabled:opacity-50 whitespace-nowrap min-h-[38px] cursor-pointer"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 shrink-0 ${refreshing ? "animate-spin" : ""}`} />
                   <span>{refreshing ? "Đang tải..." : "Làm mới"}</span>
+                </button>
+
+                {/* Nút Cài đặt Thông báo Telegram */}
+                <button
+                  onClick={() => setIsTelegramModalOpen(true)}
+                  className="px-3.5 py-2 rounded-xl border border-sky-300 dark:border-sky-800/80 bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 hover:bg-sky-100 dark:hover:bg-sky-900/50 font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm transition-all whitespace-nowrap min-h-[38px] cursor-pointer col-span-2 sm:col-span-1"
+                  title="Cài đặt hẹn giờ thông báo qua Telegram"
+                >
+                  <Send className="w-3.5 h-3.5 text-sky-600 dark:text-sky-400 shrink-0" />
+                  <span>Báo Telegram</span>
                 </button>
               </div>
             </div>
@@ -1008,13 +1021,6 @@ export default function TrialSchedulesScreen({ user: initialUser }: { user?: Use
 
         {/* =========================================================================
             DEDICATED OFF-SCREEN EXPORT CONTAINER (CHỮ TO, RÕ NÉT CỰC ĐẸP ĐỂ GỬI ZALO)
-            Container này luôn được dựng sẵn tại tọa độ ngoài màn hình với độ rộng 1250px.
-            Tất cả cỡ chữ (text-lg, text-xl, font-black) và độ tương phản cao được bảo đảm
-            khi xuất ảnh qua Clipboard để gửi vào nhóm Zalo, hoàn toàn không làm ảnh hưởng
-            đến độ gọn gàng và responsive của giao diện trực tiếp trên web/mobile.
-            ========================================================================= */}
-        {/* =========================================================================
-            DEDICATED OFF-SCREEN EXPORT CONTAINER (CHỮ TO, RÕ NÉT CỰC ĐẸP ĐỂ GỬI ZALO)
             Container ngoài chịu trách nhiệm ẩn tọa độ ngoài màn hình.
             Container trong (exportAllRef) giữ tọa độ x = 0 để html-to-image chụp ảnh hoàn hảo
             không bị hiện tượng đen ảnh hay lệch viewport.
@@ -1182,6 +1188,13 @@ export default function TrialSchedulesScreen({ user: initialUser }: { user?: Use
               })}
           </div>
         </div>
+
+        {/* Modal Cài Đặt Hẹn Giờ Thông Báo Telegram */}
+        <TelegramScheduleSettingsModal
+          isOpen={isTelegramModalOpen}
+          onClose={() => setIsTelegramModalOpen(false)}
+          selectedDate={selectedDate}
+        />
       </div>
     </AppLayout>
   );

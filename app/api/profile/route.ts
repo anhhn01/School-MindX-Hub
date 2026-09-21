@@ -86,6 +86,16 @@ export async function GET(request: NextRequest) {
       nameMessage = "Tài khoản nội bộ, có thể chỉnh sửa họ và tên.";
     }
 
+    let teacherQuotaInfo = null;
+    if (roleName.toLowerCase().includes("part-time")) {
+      const { getTeacherQuota } = await import("@/lib/services/teacher-quota-service");
+      const q = await getTeacherQuota(userData.id);
+      teacherQuotaInfo = {
+        max_submission_quota_mb: q.maxQuotaMb,
+        default_student_quota_mb: q.defaultStudentQuotaMb,
+      };
+    }
+
     return NextResponse.json({
       success: true,
       user: {
@@ -100,6 +110,8 @@ export async function GET(request: NextRequest) {
         name_message: nameMessage,
         role: roleName,
         status: statusName,
+        max_submission_quota_mb: teacherQuotaInfo?.max_submission_quota_mb,
+        default_student_quota_mb: teacherQuotaInfo?.default_student_quota_mb,
         token_expiry_days: 30,
         created_at: userData.created_at,
       },
@@ -125,7 +137,7 @@ export async function PATCH(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { full_name, password } = body;
+    const { full_name, password, default_student_quota_mb } = body;
 
     // Kiểm tra thông tin tài khoản hiện tại từ Supabase
     const { data: targetUser, error: fetchErr } = await supabase
@@ -200,24 +212,26 @@ export async function PATCH(request: NextRequest) {
       updateData.password_hash = await bcrypt.hash(cleanPass, 10);
     }
 
-    if (Object.keys(updateData).length === 0) {
+    if (Object.keys(updateData).length === 0 && default_student_quota_mb === undefined) {
       return NextResponse.json(
         { error: "Không có thông tin nào được thay đổi" },
         { status: 400 }
       );
     }
 
-    updateData.updated_at = new Date().toISOString();
-    const { error: updateErr } = await supabase
-      .from("users")
-      .update(updateData)
-      .eq("id", userId);
+    if (Object.keys(updateData).length > 0) {
+      updateData.updated_at = new Date().toISOString();
+      const { error: updateErr } = await supabase
+        .from("users")
+        .update(updateData)
+        .eq("id", userId);
 
-    if (updateErr) {
-      return NextResponse.json(
-        { error: `Lỗi cập nhật: ${updateErr.message}` },
-        { status: 500 }
-      );
+      if (updateErr) {
+        return NextResponse.json(
+          { error: `Lỗi cập nhật: ${updateErr.message}` },
+          { status: 500 }
+        );
+      }
     }
 
     const roleRel = targetUser.roles;
@@ -227,6 +241,24 @@ export async function PATCH(request: NextRequest) {
     const statusRel = targetUser.user_statuses;
     const statusObj = Array.isArray(statusRel) ? statusRel[0] : statusRel;
     const statusName = (statusObj as any)?.name || "Đã phê duyệt";
+
+    // 3. Xử lý Định mức nộp bài cho học viên (Chỉ áp dụng cho Giáo viên Part-time)
+    if (default_student_quota_mb !== undefined) {
+      if (roleName.toLowerCase().includes("part-time")) {
+        const val = Number(default_student_quota_mb);
+        if (isNaN(val) || val < 1) {
+          return NextResponse.json(
+            { error: "Định mức dữ liệu nộp cho học viên phải là số nguyên dương (MB)." },
+            { status: 400 }
+          );
+        }
+        const { updateTeacherDefaultStudentQuota } = await import("@/lib/services/teacher-quota-service");
+        const qRes = await updateTeacherDefaultStudentQuota(targetUser.id, val, targetUser.id);
+        if (!qRes.success) {
+          return NextResponse.json({ error: qRes.message || "Định mức nộp không hợp lệ" }, { status: 400 });
+        }
+      }
+    }
 
     // Ký lại token với thời hạn cố định 30 ngày và cập nhật cookies
     const { token: newSmhToken, maxAgeSeconds } = await signSmhToken(

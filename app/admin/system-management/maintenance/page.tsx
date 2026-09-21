@@ -276,7 +276,7 @@ export default function MaintenanceManagementPage() {
               rows={3}
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              placeholder="Nhập thông điệp bảo trì..."
+              placeholder="Nhập thông điệp bảo trì"
               className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-rose-500/30 transition resize-none"
             />
           </div>

@@ -1,0 +1,18 @@
+{
+  "enabled": false,
+  "frequency": "DAILY",
+  "sendTime": "08:00",
+  "daysOfWeek": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    0
+  ],
+  "dayOfMonth": 1,
+  "targetDateOffset": "TODAY",
+  "centreFilter": "ALL",
+  "lastSentAt": "2026-09-21T08:36:03.005Z"
+}

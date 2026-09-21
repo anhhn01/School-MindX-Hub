@@ -832,5 +832,31 @@
       "code": "LD",
       "isActive": true
     }
+  ],
+  "adff70a4-54c4-4994-915a-602a412a5fe0": [
+    {
+      "id": "63034f4a7d1d1e1cb14e4e57",
+      "name": "HCM - 322 Tây Thạnh",
+      "shortName": "322TT",
+      "code": "TT"
+    },
+    {
+      "id": "62cc07753c1309654f472e60",
+      "name": "HCM - 414 Lũy Bán Bích",
+      "shortName": "414LBB",
+      "code": "LBB"
+    },
+    {
+      "id": "62918d02af37d11e2da237e5",
+      "name": "HCM - Khu Tên Lửa",
+      "shortName": "174TL",
+      "code": "TL"
+    },
+    {
+      "id": "62d6dcc16e356729147d73a6",
+      "name": "HCM - 01 Trường Chinh",
+      "shortName": "01TC",
+      "code": "TC"
+    }
   ]
 }
